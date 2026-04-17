@@ -103,6 +103,11 @@ Route::get('notifications/unsubscribe/{token}', [NotificationPreferenceControlle
 Route::get('public/report/{token}', [SharedReportController::class, 'publicView'])
     ->name('public.report');
 
+// Phase 2 stub — public chatbot widget message endpoint
+Route::post('chatbot/widget/{token}/message', fn() => response()->json(['feature' => 'disabled', 'phase' => 2], 503))
+    ->name('chatbot.widget.message')
+    ->middleware('throttle:60,1');
+
 /*
 |--------------------------------------------------------------------------
 | Authenticated routes
@@ -357,6 +362,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::put('config', fn() => response()->json(['feature' => 'disabled', 'phase' => 2], 503));
         Route::get('conversations', fn() => response()->json(['feature' => 'disabled', 'phase' => 2], 503));
         Route::get('conversations/{id}', fn() => response()->json(['feature' => 'disabled', 'phase' => 2], 503));
+        Route::delete('chat/{sessionId}', fn() => response()->json(['feature' => 'disabled', 'phase' => 2], 503));
     });
 });
 
