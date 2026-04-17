@@ -35,4 +35,25 @@ return [
         ],
     ],
 
+    'clickhouse' => [
+        'host' => env('CLICKHOUSE_HOST', 'clickhouse'),
+        'port' => env('CLICKHOUSE_PORT', 8123),
+        'database' => env('CLICKHOUSE_DB', 'eye_analytics'),
+        'user' => env('CLICKHOUSE_USER', 'eye'),
+        'password' => env('CLICKHOUSE_PASSWORD', ''),
+    ],
+
+    'maxmind' => [
+        'db_path' => env('MAXMIND_DB_PATH', storage_path('app/geoip/GeoLite2-City.mmdb')),
+    ],
+
+    'anthropic' => [
+        'key' => env('ANTHROPIC_API_KEY'),
+        'model' => env('ANTHROPIC_MODEL', 'claude-3-5-sonnet-20241022'),
+    ],
+
+    'ipinfo' => [
+        'token' => env('IPINFO_TOKEN'),
+    ],
+
 ];

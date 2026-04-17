@@ -4,11 +4,7 @@ use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 
-return new class extends Migration
-{
-    /**
-     * Run the migrations.
-     */
+return new class extends Migration {
     public function up(): void
     {
         Schema::create('users', function (Blueprint $table) {
@@ -17,6 +13,16 @@ return new class extends Migration
             $table->string('email')->unique();
             $table->timestamp('email_verified_at')->nullable();
             $table->string('password');
+            $table->string('api_key', 64)->unique()->nullable();
+            $table->enum('role', ['user', 'superadmin'])->default('user');
+            $table->enum('status', ['active', 'blocked', 'suspended'])->default('active');
+            $table->string('timezone')->default('UTC');
+            $table->enum('locale', ['ar', 'en'])->default('en');
+            $table->enum('appearance', ['light', 'dark', 'system'])->default('system');
+            $table->json('onboarding')->nullable();
+            $table->string('totp_secret')->nullable();
+            $table->boolean('totp_enabled')->default(false);
+            $table->timestamp('totp_last_used_at')->nullable();
             $table->rememberToken();
             $table->timestamps();
         });
@@ -35,15 +41,30 @@ return new class extends Migration
             $table->longText('payload');
             $table->integer('last_activity')->index();
         });
+
+        Schema::create('totp_backup_codes', function (Blueprint $table) {
+            $table->id();
+            $table->foreignId('user_id')->constrained()->cascadeOnDelete();
+            $table->string('code_hash');
+            $table->timestamp('used_at')->nullable();
+            $table->timestamp('created_at')->nullable();
+        });
+
+        Schema::create('impersonation_logs', function (Blueprint $table) {
+            $table->id();
+            $table->foreignId('admin_id')->constrained('users')->cascadeOnDelete();
+            $table->foreignId('target_user_id')->constrained('users')->cascadeOnDelete();
+            $table->timestamp('started_at');
+            $table->timestamp('ended_at')->nullable();
+        });
     }
 
-    /**
-     * Reverse the migrations.
-     */
     public function down(): void
     {
-        Schema::dropIfExists('users');
-        Schema::dropIfExists('password_reset_tokens');
+        Schema::dropIfExists('impersonation_logs');
+        Schema::dropIfExists('totp_backup_codes');
         Schema::dropIfExists('sessions');
+        Schema::dropIfExists('password_reset_tokens');
+        Schema::dropIfExists('users');
     }
 };
