@@ -74,7 +74,7 @@ class OverviewController extends BaseAnalyticsController
             ];
         }
 
-        return response()->json(['data' => $data]);
+        return $this->success($data);
     }
 
     /**

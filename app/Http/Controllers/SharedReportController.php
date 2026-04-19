@@ -21,12 +21,12 @@ class SharedReportController extends Controller
             ->where('user_id', $request->user()->id)
             ->firstOrFail();
 
-        return response()->json([
-            'data' => SharedReport::where('domain_id', $domain->id)
+        return $this->success(
+            SharedReport::where('domain_id', $domain->id)
                 ->where(fn($q) => $q->whereNull('expires_at')->orWhere('expires_at', '>', now()))
                 ->latest()
-                ->get(),
-        ]);
+                ->get()
+        );
     }
 
     public function store(Request $request): JsonResponse
@@ -51,7 +51,7 @@ class SharedReportController extends Controller
             'expires_at' => $data['expires_at'] ?? null,
         ]);
 
-        return response()->json(['data' => $report], 201);
+        return $this->success($report, 201);
     }
 
     public function destroy(Request $request, int $id): JsonResponse
@@ -60,7 +60,7 @@ class SharedReportController extends Controller
             ->findOrFail($id)
             ->delete();
 
-        return response()->json(['message' => 'Shared report revoked.']);
+        return $this->success(['message' => 'Shared report revoked.']);
     }
 
     /**
@@ -84,6 +84,6 @@ class SharedReportController extends Controller
             'stats' => $this->analytics->stats($domain->id, $from, $to, 'day'),
         ];
 
-        return response()->json($snapshot);
+        return $this->success($snapshot);
     }
 }

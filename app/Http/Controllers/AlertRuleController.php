@@ -15,9 +15,7 @@ class AlertRuleController extends Controller
             ->where('user_id', $request->user()->id)
             ->firstOrFail();
 
-        return response()->json([
-            'data' => AlertRule::where('domain_id', $domain->id)->get(),
-        ]);
+        return $this->success(AlertRule::where('domain_id', $domain->id)->get());
     }
 
     public function store(Request $request, int $domainId): JsonResponse
@@ -48,7 +46,7 @@ class AlertRuleController extends Controller
             'is_active' => $data['is_active'] ?? true,
         ]);
 
-        return response()->json(['data' => $rule], 201);
+        return $this->success($rule, 201);
     }
 
     public function update(Request $request, int $id): JsonResponse
@@ -65,7 +63,7 @@ class AlertRuleController extends Controller
 
         $rule->update($data);
 
-        return response()->json(['data' => $rule]);
+        return $this->success($rule);
     }
 
     public function destroy(Request $request, int $id): JsonResponse
@@ -74,6 +72,6 @@ class AlertRuleController extends Controller
             ->findOrFail($id)
             ->delete();
 
-        return response()->json(['message' => 'Alert rule deleted.']);
+        return $this->success(['message' => 'Alert rule deleted.']);
     }
 }

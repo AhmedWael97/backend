@@ -24,6 +24,6 @@ class StatsController extends BaseAnalyticsController
             $request->granularity(),
         );
 
-        return response()->json($data);
+        return $this->success($data);
     }
 }

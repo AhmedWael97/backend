@@ -40,6 +40,6 @@ class UxErrorsController extends Controller
             LIMIT 100
         ");
 
-        return response()->json(['data' => $rows]);
+        return $this->success($rows);
     }
 }

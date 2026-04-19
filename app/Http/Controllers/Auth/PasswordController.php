@@ -24,7 +24,7 @@ class PasswordController extends Controller
             ]);
         }
 
-        return response()->json(['message' => __($status)]);
+        return $this->success(['message' => __($status)]);
     }
 
     public function reset(ResetPasswordRequest $request): JsonResponse
@@ -47,6 +47,6 @@ class PasswordController extends Controller
             ]);
         }
 
-        return response()->json(['message' => __($status)]);
+        return $this->success(['message' => __($status)]);
     }
 }

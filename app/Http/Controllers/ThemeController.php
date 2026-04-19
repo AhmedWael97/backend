@@ -14,6 +14,6 @@ class ThemeController extends Controller
             return ThemeSetting::pluck('value', 'key')->all();
         });
 
-        return response()->json($data);
+        return $this->success($data);
     }
 }

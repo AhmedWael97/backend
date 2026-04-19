@@ -33,12 +33,12 @@ class TwoFactorController extends Controller
         $userId = cache()->get($cacheKey);
 
         if (!$userId) {
-            return response()->json(['message' => 'Invalid or expired challenge.'], 422);
+            return $this->error('Invalid or expired challenge.', 422);
         }
 
         $user = User::find($userId);
         if (!$user) {
-            return response()->json(['message' => 'User not found.'], 404);
+            return $this->error('User not found.', 404);
         }
 
         $code = $request->input('code');
@@ -60,16 +60,15 @@ class TwoFactorController extends Controller
         }
 
         if (!$valid) {
-            return response()->json(['message' => 'Invalid verification code.'], 422);
+            return $this->error('Invalid verification code.', 422);
         }
 
-        // Update last used timestamp and clear challenge
         $user->update(['totp_last_used_at' => now()]);
         cache()->forget($cacheKey);
 
         $token = $user->createToken('api')->plainTextToken;
 
-        return response()->json([
+        return $this->success([
             'user' => $user->only(['id', 'name', 'email', 'locale', 'timezone', 'appearance', 'role', 'status', 'totp_enabled']),
             'token' => $token,
         ]);
@@ -95,9 +94,9 @@ class TwoFactorController extends Controller
         $options = new QROptions(['outputType' => QRCode::OUTPUT_IMAGE_PNG, 'eccLevel' => QRCode::ECC_H]);
         $qrCode = (new QRCode($options))->render($otpauthUrl);
 
-        return response()->json([
+        return $this->success([
             'secret' => $secret,
-            'qr_code_url' => $qrCode, // base64 PNG data URI
+            'qr_code_url' => $qrCode,
         ]);
     }
 
@@ -110,12 +109,12 @@ class TwoFactorController extends Controller
         $secret = cache()->get("totp_setup:{$user->id}");
 
         if (!$secret) {
-            return response()->json(['message' => 'Setup session expired. Please restart.'], 422);
+            return $this->error('Setup session expired. Please restart.', 422);
         }
 
         $valid = $this->google2fa->verifyKey($secret, $request->input('code'), 1);
         if (!$valid) {
-            return response()->json(['message' => 'Invalid verification code.'], 422);
+            return $this->error('Invalid verification code.', 422);
         }
 
         // Generate backup codes
@@ -139,9 +138,9 @@ class TwoFactorController extends Controller
 
         cache()->forget("totp_setup:{$user->id}");
 
-        return response()->json([
+        return $this->success([
             'message' => '2FA enabled successfully.',
-            'backup_codes' => $backupCodes, // shown only once
+            'backup_codes' => $backupCodes,
         ]);
     }
 
@@ -150,9 +149,7 @@ class TwoFactorController extends Controller
      */
     public function status(Request $request): JsonResponse
     {
-        return response()->json([
-            'data' => ['enabled' => (bool) $request->user()->totp_enabled],
-        ]);
+        return $this->success(['enabled' => (bool) $request->user()->totp_enabled]);
     }
 
     /**
@@ -165,10 +162,9 @@ class TwoFactorController extends Controller
         $user = $request->user();
 
         if (!\Illuminate\Support\Facades\Hash::check($request->input('password'), $user->password)) {
-            return response()->json(['message' => 'Incorrect password.'], 422);
+            return $this->error('Incorrect password.', 422);
         }
 
-        // Reuse existing setup logic
         $secret = $this->google2fa->generateSecretKey();
         cache()->put("totp_setup:{$user->id}", $secret, now()->addMinutes(15));
 
@@ -177,9 +173,7 @@ class TwoFactorController extends Controller
         $options = new \chillerlan\QRCode\QROptions(['outputType' => QRCode::OUTPUT_IMAGE_PNG, 'eccLevel' => QRCode::ECC_H]);
         $qrCode = (new QRCode($options))->render($otpauthUrl);
 
-        return response()->json([
-            'data' => ['qr_code' => $qrCode, 'secret' => $secret],
-        ]);
+        return $this->success(['qr_code' => $qrCode, 'secret' => $secret]);
     }
 
     /**
@@ -201,17 +195,17 @@ class TwoFactorController extends Controller
         $user = $request->user();
 
         if (!\Illuminate\Support\Facades\Hash::check($request->input('password'), $user->password)) {
-            return response()->json(['message' => 'Incorrect password.'], 422);
+            return $this->error('Incorrect password.', 422);
         }
 
         if (!$user->totp_enabled) {
-            return response()->json(['message' => '2FA is not enabled.'], 422);
+            return $this->error('2FA is not enabled.', 422);
         }
 
         $user->update(['totp_secret' => null, 'totp_enabled' => false, 'totp_last_used_at' => null]);
         TotpBackupCode::where('user_id', $user->id)->delete();
 
-        return response()->json(['message' => '2FA disabled.']);
+        return $this->success(['message' => '2FA disabled.']);
     }
 
     /**
@@ -223,7 +217,7 @@ class TwoFactorController extends Controller
         $valid = $this->google2fa->verifyKey($user->totp_secret, $request->input('code'), 1);
 
         if (!$valid) {
-            return response()->json(['message' => 'Invalid verification code.'], 422);
+            return $this->error('Invalid verification code.', 422);
         }
 
         $user->update([
@@ -233,6 +227,6 @@ class TwoFactorController extends Controller
         ]);
         TotpBackupCode::where('user_id', $user->id)->delete();
 
-        return response()->json(['message' => '2FA disabled.']);
+        return $this->success(['message' => '2FA disabled.']);
     }
 }

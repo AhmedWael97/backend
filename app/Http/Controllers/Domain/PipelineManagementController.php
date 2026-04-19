@@ -1,4 +1,4 @@
-<?php
+﻿<?php
 
 namespace App\Http\Controllers\Domain;
 
@@ -14,9 +14,7 @@ class PipelineManagementController extends Controller
     {
         $this->authorizeUser($request, $domain);
 
-        return response()->json([
-            'data' => Pipeline::where('domain_id', $domain->id)->with('steps')->get(),
-        ]);
+        return $this->success(Pipeline::where('domain_id', $domain->id)->with('steps')->get());
     }
 
     public function store(Request $request, Domain $domain): JsonResponse
@@ -42,7 +40,7 @@ class PipelineManagementController extends Controller
             $pipeline->steps()->create($step);
         }
 
-        return response()->json(['data' => $pipeline->load('steps')], 201);
+        return $this->success($pipeline->load('steps'), 201);
     }
 
     public function update(Request $request, Domain $domain, Pipeline $pipeline): JsonResponse
@@ -56,7 +54,7 @@ class PipelineManagementController extends Controller
 
         $pipeline->update($data);
 
-        return response()->json(['data' => $pipeline->fresh()]);
+        return $this->success($pipeline->fresh());
     }
 
     public function destroy(Request $request, Domain $domain, Pipeline $pipeline): JsonResponse
@@ -64,7 +62,7 @@ class PipelineManagementController extends Controller
         $this->authorizeUser($request, $domain);
         $pipeline->delete();
 
-        return response()->json(['message' => 'Pipeline deleted.']);
+        return $this->success(['message' => 'Pipeline deleted.']);
     }
 
     /**
@@ -83,7 +81,7 @@ class PipelineManagementController extends Controller
         $position = $pipeline->steps()->count();
         $step = $pipeline->steps()->create(array_merge($data, ['order' => $position + 1]));
 
-        return response()->json(['data' => $step], 201);
+        return $this->success($step, 201);
     }
 
     /**
@@ -99,7 +97,7 @@ class PipelineManagementController extends Controller
 
         $step->delete();
 
-        return response()->json(['message' => 'Step removed.']);
+        return $this->success(['message' => 'Step removed.']);
     }
 
     /**
@@ -119,7 +117,7 @@ class PipelineManagementController extends Controller
             $pipeline->steps()->where('id', $item['id'])->update(['order' => $item['position']]);
         }
 
-        return response()->json(['data' => $pipeline->load('steps')]);
+        return $this->success($pipeline->load('steps'));
     }
 
     private function authorizeUser(Request $request, Domain $domain): void

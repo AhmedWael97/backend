@@ -18,9 +18,7 @@ class WebhookController extends Controller
             ->where('user_id', $request->user()->id)
             ->firstOrFail();
 
-        return response()->json([
-            'data' => Webhook::where('domain_id', $domain->id)->get(),
-        ]);
+        return $this->success(Webhook::where('domain_id', $domain->id)->get());
     }
 
     public function store(Request $request, int $domainId): JsonResponse
@@ -45,7 +43,7 @@ class WebhookController extends Controller
             'is_active' => $data['is_active'] ?? true,
         ]);
 
-        return response()->json(['data' => $webhook], 201);
+        return $this->success($webhook, 201);
     }
 
     public function update(Request $request, int $id): JsonResponse
@@ -63,7 +61,7 @@ class WebhookController extends Controller
 
         $webhook->update($data);
 
-        return response()->json(['data' => $webhook]);
+        return $this->success($webhook);
     }
 
     public function destroy(Request $request, int $id): JsonResponse
@@ -72,7 +70,7 @@ class WebhookController extends Controller
             ->findOrFail($id)
             ->delete();
 
-        return response()->json(['message' => 'Webhook deleted.']);
+        return $this->success(['message' => 'Webhook deleted.']);
     }
 
     /**
@@ -88,7 +86,7 @@ class WebhookController extends Controller
             ->take(50)
             ->get(['id', 'event', 'status_code', 'response_body', 'delivered_at']);
 
-        return response()->json(['data' => $deliveries]);
+        return $this->success($deliveries);
     }
 
     /**
@@ -108,6 +106,6 @@ class WebhookController extends Controller
 
         $result = WebhookDeliveryJob::deliverSync($webhook, $payload);
 
-        return response()->json(['result' => $result]);
+        return $this->success(['result' => $result]);
     }
 }

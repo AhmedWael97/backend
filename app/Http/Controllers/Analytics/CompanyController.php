@@ -27,10 +27,7 @@ class CompanyController extends Controller
         // Gate behind Pro plan
         $plan = optional($request->user()->subscription?->plan);
         if (!$plan->getLimit('b2b_intelligence', false)) {
-            return response()->json([
-                'message' => 'Company enrichment is a Pro plan feature. Please upgrade.',
-                'upgrade' => true,
-            ], 403);
+            return $this->error('Company enrichment is a Pro plan feature. Please upgrade.', 403, ['upgrade' => true]);
         }
 
         $from = $request->query('from', now()->subDays(30)->format('Y-m-d'));
@@ -69,9 +66,13 @@ class CompanyController extends Controller
         ");
 
         return response()->json([
+            'statusCode' => 200,
+            'statusText' => 'success',
             'data' => $rows,
-            'page' => $page,
-            'per_page' => $limit,
+            'meta' => [
+                'per_page' => $limit,
+                'current_page' => $page,
+            ],
         ]);
     }
 
@@ -86,7 +87,7 @@ class CompanyController extends Controller
 
         $plan = optional($request->user()->subscription?->plan);
         if (!$plan->getLimit('b2b_intelligence', false)) {
-            return response()->json(['message' => 'Upgrade to Pro.', 'upgrade' => true], 403);
+            return $this->error('Upgrade to Pro.', 403, ['upgrade' => true]);
         }
 
         $rows = $this->clickhouse->select("
@@ -110,6 +111,6 @@ class CompanyController extends Controller
             LIMIT 200
         ");
 
-        return response()->json(['data' => $rows]);
+        return $this->success($rows);
     }
 }

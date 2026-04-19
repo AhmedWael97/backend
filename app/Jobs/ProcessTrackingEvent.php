@@ -3,6 +3,10 @@
 namespace App\Jobs;
 
 use App\Events\RealtimeVisitorUpdate;
+use App\Models\Domain;
+use App\Models\User;
+use App\Models\VisitorIdentity;
+use App\Models\Webhook;
 use App\Services\ClickHouseService;
 use App\Services\GeoIpService;
 use Illuminate\Bus\Queueable;
@@ -51,7 +55,57 @@ class ProcessTrackingEvent implements ShouldQueue
             'ts' => $p['ts'],
         ];
 
+        // Extract UTM params from props
+        $utmSource = (string) ($p['props']['utm_source'] ?? '');
+        $utmMedium = (string) ($p['props']['utm_medium'] ?? '');
+        $utmCampaign = (string) ($p['props']['utm_campaign'] ?? '');
+        $utmTerm = (string) ($p['props']['utm_term'] ?? '');
+        $utmContent = (string) ($p['props']['utm_content'] ?? '');
+
+        $row['utm_source'] = $utmSource;
+        $row['utm_medium'] = $utmMedium;
+        $row['utm_campaign'] = $utmCampaign;
+        $row['utm_term'] = $utmTerm;
+        $row['utm_content'] = $utmContent;
+
         $clickhouse->insertJson('events', [$row]);
+
+        // Write session record for pageview (entry event)
+        if ($row['type'] === 'pageview') {
+            // Company enrichment — check Redis cache first
+            $ipHash = $row['ip_hash'];
+            $companyName = null;
+            $enrichCacheKey = "enrich:{$ipHash}";
+            $cached = Redis::get($enrichCacheKey);
+            if ($cached !== null) {
+                $enriched = json_decode($cached, true);
+                $companyName = $enriched['company_name'] ?? null;
+            } elseif (config('services.ipinfo.token')) {
+                EnrichCompanyJob::dispatch($ipHash, (string) ($p['ip'] ?? ''), $row['domain_id'], $row['session_id'])
+                    ->onQueue('ai');
+            }
+
+            $clickhouse->insertJson('sessions', [
+                [
+                    'domain_id' => $row['domain_id'],
+                    'session_id' => $row['session_id'],
+                    'visitor_id' => $row['visitor_id'],
+                    'duration_seconds' => 0,
+                    'page_count' => 1,
+                    'country' => $row['country'],
+                    'device' => $row['device_type'],
+                    'browser' => $row['browser'],
+                    'os' => $row['os'],
+                    'entry_url' => $row['url'],
+                    'exit_url' => $row['url'],
+                    'utm_source' => $utmSource,
+                    'utm_medium' => $utmMedium,
+                    'utm_campaign' => $utmCampaign,
+                    'company_name' => $companyName,
+                    'started_at' => $row['ts'],
+                ]
+            ]);
+        }
 
         // Also write to custom_events for fast custom event queries
         if ($row['type'] === 'custom' && !empty($p['props']['e'])) {
@@ -66,6 +120,64 @@ class ProcessTrackingEvent implements ShouldQueue
                     'ts' => $row['ts'],
                 ]
             ]);
+        }
+
+        // Handle identify events — upsert visitor_identities
+        if ($row['type'] === 'identify' && !empty($p['props']['uid'])) {
+            VisitorIdentity::updateOrCreate(
+                [
+                    'domain_id' => $row['domain_id'],
+                    'visitor_id' => $row['visitor_id'],
+                ],
+                [
+                    'external_id' => substr((string) $p['props']['uid'], 0, 255),
+                    'traits' => $p['props'],
+                    'first_identified_at' => now(),
+                    'updated_at' => now(),
+                ]
+            );
+        }
+
+        // Dispatch webhooks for any active webhook subscribed to this event type
+        $webhooks = Webhook::where('domain_id', $row['domain_id'])
+            ->where('is_active', true)
+            ->get();
+
+        foreach ($webhooks as $webhook) {
+            $subscribedEvents = $webhook->events ?? [];
+            if (in_array($row['type'], $subscribedEvents, true) || in_array('*', $subscribedEvents, true)) {
+                WebhookDeliveryJob::dispatch($webhook->id, $row['type'], [
+                    'domain_id' => $row['domain_id'],
+                    'visitor_id' => $row['visitor_id'],
+                    'session_id' => $row['session_id'],
+                    'type' => $row['type'],
+                    'url' => $row['url'],
+                    'ts' => $row['ts'],
+                ])->onQueue('notifications');
+
+                $webhook->update(['last_triggered_at' => now()]);
+            }
+        }
+
+        // Auto-update onboarding: mark script_installed + first_event_received
+        $domain = Domain::find($row['domain_id']);
+        if ($domain) {
+            $user = User::find($domain->user_id);
+            if ($user) {
+                $onboarding = $user->onboarding ?? [];
+                $changed = false;
+                if (empty($onboarding['script_installed'])) {
+                    $onboarding['script_installed'] = true;
+                    $changed = true;
+                }
+                if (empty($onboarding['first_event_received'])) {
+                    $onboarding['first_event_received'] = true;
+                    $changed = true;
+                }
+                if ($changed) {
+                    $user->update(['onboarding' => $onboarding]);
+                }
+            }
         }
 
         // Update realtime active-visitors sorted set in Redis

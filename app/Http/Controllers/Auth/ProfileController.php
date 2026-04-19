@@ -13,7 +13,7 @@ class ProfileController extends Controller
 {
     public function show(Request $request): JsonResponse
     {
-        return response()->json([
+        return $this->success([
             'user' => $request->user()->only([
                 'id',
                 'name',
@@ -34,7 +34,7 @@ class ProfileController extends Controller
     {
         $request->user()->update($request->validated());
 
-        return response()->json([
+        return $this->success([
             'message' => 'Profile updated.',
             'user' => $request->user()->fresh()->only([
                 'id',
@@ -60,7 +60,7 @@ class ProfileController extends Controller
 
         $token = $request->user()->createToken('api')->plainTextToken;
 
-        return response()->json([
+        return $this->success([
             'message' => 'Password changed. All other sessions have been revoked.',
             'token' => $token,
         ]);
@@ -74,7 +74,7 @@ class ProfileController extends Controller
         $newKey = \Illuminate\Support\Str::random(64);
         $request->user()->update(['api_key' => $newKey]);
 
-        return response()->json([
+        return $this->success([
             'message' => 'API key regenerated.',
             'api_key' => $newKey,
         ]);
@@ -89,9 +89,7 @@ class ProfileController extends Controller
         $user = \App\Models\User::find($request->user()->id);
         $key = $user->api_key;
 
-        return response()->json([
-            'data' => ['api_key' => $key],
-        ]);
+        return $this->success(['api_key' => $key]);
     }
 
     /**
@@ -110,7 +108,7 @@ class ProfileController extends Controller
                 'is_current' => $t->id === $request->user()->currentAccessToken()->id,
             ]);
 
-        return response()->json(['data' => $tokens]);
+        return $this->success($tokens);
     }
 
     /**
@@ -122,7 +120,7 @@ class ProfileController extends Controller
             ->where('id', $tokenId)
             ->delete();
 
-        return response()->json(['message' => 'Session revoked.']);
+        return $this->success(['message' => 'Session revoked.']);
     }
 
     /**
@@ -138,7 +136,7 @@ class ProfileController extends Controller
 
         $request->user()->update($data);
 
-        return response()->json([
+        return $this->success([
             'message' => 'Preferences updated.',
             'user' => $request->user()->fresh()->only([
                 'id',
@@ -164,6 +162,6 @@ class ProfileController extends Controller
         $request->user()->currentAccessToken()->delete();
         $user->delete();
 
-        return response()->json(['message' => 'Account deleted.']);
+        return $this->success(['message' => 'Account deleted.']);
     }
 }

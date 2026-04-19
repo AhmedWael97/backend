@@ -29,14 +29,14 @@ class AdminUserController extends Controller
 
         $users = $query->latest()->paginate(50);
 
-        return response()->json($users);
+        return $this->paginated($users);
     }
 
     public function show(Request $request, int $id): JsonResponse
     {
         $user = User::with(['subscription.plan', 'domains'])->findOrFail($id);
 
-        return response()->json(['data' => $user]);
+        return $this->success($user);
     }
 
     public function update(Request $request, int $id): JsonResponse
@@ -55,7 +55,7 @@ class AdminUserController extends Controller
 
         $this->auditLog($request, 'user.edit', 'User', $id, $before, $data);
 
-        return response()->json(['message' => 'User updated.', 'data' => $user->fresh()]);
+        return $this->success(['message' => 'User updated.', 'data' => $user->fresh()]);
     }
 
     public function block(Request $request, int $id): JsonResponse
@@ -64,7 +64,7 @@ class AdminUserController extends Controller
         $user->update(['status' => 'blocked']);
         $this->auditLog($request, 'user.block', 'User', $id);
 
-        return response()->json(['message' => 'User blocked.']);
+        return $this->success(['message' => 'User blocked.']);
     }
 
     public function unblock(Request $request, int $id): JsonResponse
@@ -73,7 +73,7 @@ class AdminUserController extends Controller
         $user->update(['status' => 'active']);
         $this->auditLog($request, 'user.unblock', 'User', $id);
 
-        return response()->json(['message' => 'User unblocked.']);
+        return $this->success(['message' => 'User unblocked.']);
     }
 
     /**
@@ -94,7 +94,7 @@ class AdminUserController extends Controller
 
         $token = $target->createToken('impersonation', ['*'], now()->addHours(2))->plainTextToken;
 
-        return response()->json([
+        return $this->success([
             'token' => $token,
             'target_user' => $target->only(['id', 'name', 'email']),
             'expires_at' => now()->addHours(2)->toIso8601String(),
@@ -112,7 +112,7 @@ class AdminUserController extends Controller
             ->whereNull('ended_at')
             ->update(['ended_at' => now()]);
 
-        return response()->json(['message' => 'Impersonation ended.']);
+        return $this->success(['message' => 'Impersonation ended.']);
     }
 
     /**
@@ -124,7 +124,7 @@ class AdminUserController extends Controller
         $user->update(['totp_secret' => null, 'totp_enabled' => false, 'totp_last_used_at' => null]);
         \App\Models\TotpBackupCode::where('user_id', $user->id)->delete();
         $this->auditLog($request, 'user.disable_2fa', 'User', $id);
-        return response()->json(['message' => '2FA disabled for user.']);
+        return $this->success(['message' => '2FA disabled for user.']);
     }
 
     /**
@@ -134,12 +134,12 @@ class AdminUserController extends Controller
     {
         $user = User::findOrFail($id);
         if ($user->id === $request->user()->id) {
-            return response()->json(['message' => 'Cannot modify your own admin role.'], 403);
+            return $this->error('Cannot modify your own admin role.', 403);
         }
         $newRole = $user->role === 'superadmin' ? 'user' : 'superadmin';
         $user->update(['role' => $newRole]);
         $this->auditLog($request, 'user.toggle_admin', 'User', $id, ['role' => $user->role], ['role' => $newRole]);
-        return response()->json(['message' => 'Role updated.', 'role' => $newRole]);
+        return $this->success(['message' => 'Role updated.', 'role' => $newRole]);
     }
 
     /**
@@ -149,12 +149,12 @@ class AdminUserController extends Controller
     {
         $user = User::findOrFail($id);
         if ($user->id === $request->user()->id) {
-            return response()->json(['message' => 'Cannot delete your own account.'], 403);
+            return $this->error('Cannot delete your own account.', 403);
         }
         $this->auditLog($request, 'user.delete', 'User', $id);
         $user->tokens()->delete();
         $user->delete();
-        return response()->json(['message' => 'User deleted.']);
+        return $this->success(['message' => 'User deleted.']);
     }
 
     private function auditLog(Request $request, string $action, string $type, int $id, array $before = [], array $after = []): void

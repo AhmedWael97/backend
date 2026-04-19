@@ -4,12 +4,16 @@ namespace App\Http\Controllers\Analytics;
 
 use App\Http\Controllers\Controller;
 use App\Models\Domain;
+use App\Services\ClickHouseService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
 
 class VisitorController extends Controller
 {
+    public function __construct(private ClickHouseService $ch)
+    {
+    }
+
     /**
      * GET /api/analytics/{domainId}/visitors
      */
@@ -21,45 +25,56 @@ class VisitorController extends Controller
 
         $page = max(1, (int) $request->query('page', 1));
         $limit = 50;
+        $offset = ($page - 1) * $limit;
         $search = $request->query('search');
         $device = $request->query('device');
 
-        // Build base query from sessions table in PostgreSQL
-        $query = DB::table('sessions as s')
-            ->where('s.domain_id', $domain->id)
-            ->select([
-                's.visitor_id',
-                DB::raw('MAX(s.started_at) as last_seen'),
-                DB::raw('COUNT(*) as session_count'),
-                DB::raw('MAX(s.device_type) as device_type'),
-                DB::raw('MAX(s.country) as country'),
-                DB::raw('MAX(s.browser) as browser'),
-            ])
-            ->groupBy('s.visitor_id');
+        $where = ['domain_id = ' . (int) $domain->id];
 
         if ($device && $device !== 'all') {
-            $query->where('s.device_type', $device);
+            $where[] = "device_type = '" . addslashes($device) . "'";
         }
-
         if ($search) {
-            $query->where(function ($q) use ($search) {
-                $q->where('s.visitor_id', 'like', "%{$search}%");
-            });
+            $where[] = "visitor_id LIKE '%" . addslashes($search) . "%'";
         }
 
-        $total = DB::table(DB::raw("({$query->toSql()}) as v"))
-            ->mergeBindings($query)
-            ->count();
-        $visitors = $query->orderByDesc('last_seen')
-            ->offset(($page - 1) * $limit)
-            ->limit($limit)
-            ->get();
+        $whereClause = 'WHERE ' . implode(' AND ', $where);
+
+        $countRows = $this->ch->select(
+            "SELECT count() AS total
+             FROM (
+                 SELECT visitor_id
+                 FROM sessions
+                 {$whereClause}
+                 GROUP BY visitor_id
+             )"
+        );
+        $total = (int) ($countRows[0]['total'] ?? 0);
+
+        $visitors = $this->ch->select(
+            "SELECT
+                 visitor_id,
+                 max(started_at)  AS last_seen,
+                 count()          AS session_count,
+                 any(device_type) AS device_type,
+                 any(country)     AS country,
+                 any(browser)     AS browser
+             FROM sessions
+             {$whereClause}
+             GROUP BY visitor_id
+             ORDER BY last_seen DESC
+             LIMIT {$limit} OFFSET {$offset}"
+        );
 
         return response()->json([
+            'statusCode' => 200,
+            'statusText' => 'success',
             'data' => $visitors,
-            'total' => $total,
-            'page' => $page,
-            'per_page' => $limit,
+            'meta' => [
+                'total' => $total,
+                'per_page' => $limit,
+                'current_page' => $page,
+            ],
         ]);
     }
 
@@ -72,25 +87,33 @@ class VisitorController extends Controller
             ->where('user_id', $request->user()->id)
             ->firstOrFail();
 
-        // Recent sessions
-        $sessions = DB::table('sessions')
-            ->where('domain_id', $domain->id)
-            ->where('visitor_id', $visitorId)
-            ->orderByDesc('started_at')
-            ->limit(10)
-            ->get();
+        $safeVisitor = addslashes($visitorId);
+        $domainId = (int) $domain->id;
 
-        // Recent page views from events (if events table is accessible via query)
-        // Fallback to empty array if ClickHouse is not available in current context
-        $pageviews = [];
+        $sessions = $this->ch->select(
+            "SELECT *
+             FROM sessions
+             WHERE domain_id = {$domainId}
+               AND visitor_id = '{$safeVisitor}'
+             ORDER BY started_at DESC
+             LIMIT 10"
+        );
 
-        return response()->json([
-            'data' => [
-                'visitor_id' => $visitorId,
-                'sessions' => $sessions,
-                'pageviews' => $pageviews,
-                'identified_as' => null,
-            ],
+        $pageviews = $this->ch->select(
+            "SELECT url, title, toUnixTimestamp(timestamp) AS ts
+             FROM events
+             WHERE domain_id = {$domainId}
+               AND visitor_id = '{$safeVisitor}'
+               AND event_type = 'pageview'
+             ORDER BY timestamp DESC
+             LIMIT 50"
+        );
+
+        return $this->success([
+            'visitor_id' => $visitorId,
+            'sessions' => $sessions,
+            'pageviews' => $pageviews,
+            'identified_as' => null,
         ]);
     }
 }

@@ -22,6 +22,6 @@ class AdminAuditLogController extends Controller
         if ($to = $request->query('to'))
             $query->where('created_at', '<=', $to);
 
-        return response()->json($query->paginate(50));
+        return $this->paginated($query->paginate(50));
     }
 }

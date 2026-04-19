@@ -8,6 +8,23 @@ use Illuminate\Support\Facades\Redis;
 
 class HealthController extends Controller
 {
+    /**
+     * @OA\Get(
+     *   path="/api/v1/health",
+     *   summary="Service health check",
+     *   tags={"Health"},
+     *   @OA\Response(
+     *     response=200,
+     *     description="All services healthy",
+     *     @OA\JsonContent(
+     *       @OA\Property(property="status", type="string", example="ok"),
+     *       @OA\Property(property="checks", type="object"),
+     *       @OA\Property(property="latency_ms", type="object")
+     *     )
+     *   ),
+     *   @OA\Response(response=503, description="One or more services degraded")
+     * )
+     */
     public function __invoke(): JsonResponse
     {
         $checks = [];

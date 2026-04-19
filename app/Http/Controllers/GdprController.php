@@ -35,7 +35,7 @@ class GdprController extends Controller
 
         DeleteVisitorDataJob::dispatch($deletion->id)->onQueue('default');
 
-        return response()->json(['message' => 'Deletion request queued.', 'id' => $deletion->id], 202);
+        return $this->success(['message' => 'Deletion request queued.', 'id' => $deletion->id], 202);
     }
 
     /**
@@ -56,6 +56,6 @@ class GdprController extends Controller
             ->where('visitor_id', $data['visitor_id'])
             ->exists();
 
-        return response()->json(['opted_out' => $optedOut]);
+        return $this->success(['opted_out' => $optedOut]);
     }
 }

@@ -45,7 +45,7 @@ class AdminStatsController extends Controller
         } catch (\Throwable) {
         }
 
-        return response()->json([
+        return $this->success([
             'total_users' => $totalUsers,
             'active_users' => $activeUsers,
             'active_subscriptions' => $activeSubs,

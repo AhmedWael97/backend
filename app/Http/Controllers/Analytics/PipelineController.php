@@ -30,6 +30,6 @@ class PipelineController extends BaseAnalyticsController
             $request->end(),
         );
 
-        return response()->json(['data' => $steps]);
+        return $this->success($steps);
     }
 }

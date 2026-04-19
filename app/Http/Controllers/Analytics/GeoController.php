@@ -23,6 +23,6 @@ class GeoController extends BaseAnalyticsController
             $request->end(),
         );
 
-        return response()->json($data);
+        return $this->success($data);
     }
 }

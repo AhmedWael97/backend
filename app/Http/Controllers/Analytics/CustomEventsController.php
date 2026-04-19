@@ -24,6 +24,6 @@ class CustomEventsController extends BaseAnalyticsController
             $request->limit(),
         );
 
-        return response()->json(['data' => $events]);
+        return $this->success($events);
     }
 }

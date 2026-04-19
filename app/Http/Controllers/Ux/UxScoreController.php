@@ -22,14 +22,14 @@ class UxScoreController extends Controller
             ->first();
 
         if (!$score) {
-            return response()->json([
+            return $this->success([
                 'score' => null,
                 'breakdown' => null,
                 'calculated_at' => null,
             ]);
         }
 
-        return response()->json([
+        return $this->success([
             'score' => $score->score,
             'breakdown' => $score->breakdown,
             'calculated_at' => $score->calculated_at,

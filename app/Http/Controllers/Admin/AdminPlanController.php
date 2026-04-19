@@ -12,7 +12,7 @@ class AdminPlanController extends Controller
 {
     public function index(): JsonResponse
     {
-        return response()->json(['data' => Plan::orderBy('sort_order')->get()]);
+        return $this->success(Plan::orderBy('sort_order')->get());
     }
 
     public function store(Request $request): JsonResponse
@@ -21,12 +21,12 @@ class AdminPlanController extends Controller
         $plan = Plan::create($data);
         $this->auditLog($request, 'plan.create', $plan->id, [], $data);
 
-        return response()->json(['data' => $plan], 201);
+        return $this->success($plan, 201);
     }
 
     public function show(int $id): JsonResponse
     {
-        return response()->json(['data' => Plan::findOrFail($id)]);
+        return $this->success(Plan::findOrFail($id));
     }
 
     public function update(Request $request, int $id): JsonResponse
@@ -37,7 +37,7 @@ class AdminPlanController extends Controller
         $plan->update($data);
         $this->auditLog($request, 'plan.edit', $id, $before, $data);
 
-        return response()->json(['data' => $plan->fresh()]);
+        return $this->success($plan->fresh());
     }
 
     public function destroy(Request $request, int $id): JsonResponse
@@ -46,7 +46,7 @@ class AdminPlanController extends Controller
         $this->auditLog($request, 'plan.delete', $id, $plan->toArray());
         $plan->delete();
 
-        return response()->json(['message' => 'Plan deleted.']);
+        return $this->success(['message' => 'Plan deleted.']);
     }
 
     public function toggleVisibility(Request $request, int $id): JsonResponse
@@ -54,7 +54,7 @@ class AdminPlanController extends Controller
         $plan = Plan::findOrFail($id);
         $plan->update(['is_public' => !$plan->is_public]);
 
-        return response()->json(['message' => 'Visibility toggled.', 'is_public' => $plan->is_public]);
+        return $this->success(['message' => 'Visibility toggled.', 'is_public' => $plan->is_public]);
     }
 
     private function validatedPlanData(Request $request, bool $partial = false): array

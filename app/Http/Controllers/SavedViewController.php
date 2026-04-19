@@ -15,12 +15,12 @@ class SavedViewController extends Controller
             ->where('user_id', $request->user()->id)
             ->firstOrFail();
 
-        return response()->json([
-            'data' => SavedView::where('domain_id', $domain->id)
+        return $this->success(
+            SavedView::where('domain_id', $domain->id)
                 ->where('user_id', $request->user()->id)
                 ->latest()
-                ->get(),
-        ]);
+                ->get()
+        );
     }
 
     public function store(Request $request, int $domainId): JsonResponse
@@ -41,7 +41,7 @@ class SavedViewController extends Controller
             'filters' => $data['filters'],
         ]);
 
-        return response()->json(['data' => $view], 201);
+        return $this->success($view, 201);
     }
 
     public function destroy(Request $request, int $id): JsonResponse
@@ -50,6 +50,6 @@ class SavedViewController extends Controller
             ->findOrFail($id)
             ->delete();
 
-        return response()->json(['message' => 'Saved view deleted.']);
+        return $this->success(['message' => 'Saved view deleted.']);
     }
 }

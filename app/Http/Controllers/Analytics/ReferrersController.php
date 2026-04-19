@@ -24,6 +24,6 @@ class ReferrersController extends BaseAnalyticsController
             $request->limit(),
         );
 
-        return response()->json(['data' => $referrers]);
+        return $this->success($referrers);
     }
 }

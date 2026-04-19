@@ -19,7 +19,7 @@ class RealtimeController extends BaseAnalyticsController
 
         $active = $this->analytics->activeVisitors($domain->id);
 
-        return response()->json([
+        return $this->success([
             'active_visitors' => $active,
             'ts' => now()->toIso8601String(),
         ]);

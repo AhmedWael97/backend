@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Models\AuditLog;
 use App\Models\ThemeSetting;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -13,7 +14,7 @@ class AdminThemeController extends Controller
 {
     public function index(): JsonResponse
     {
-        return response()->json(['data' => ThemeSetting::all()]);
+        return $this->success(ThemeSetting::all());
     }
 
     public function update(Request $request): JsonResponse
@@ -34,7 +35,18 @@ class AdminThemeController extends Controller
 
         Cache::forget('theme_settings');
 
-        return response()->json(['message' => 'Theme settings updated.']);
+        AuditLog::create([
+            'admin_id' => $request->user()->id,
+            'action' => 'theme.update',
+            'target_type' => 'ThemeSetting',
+            'target_id' => null,
+            'before' => null,
+            'after' => array_column($data['settings'], 'value', 'key'),
+            'ip' => $request->ip(),
+            'user_agent' => $request->userAgent(),
+        ]);
+
+        return $this->success(['message' => 'Theme settings updated.']);
     }
 
     /**
@@ -65,6 +77,17 @@ class AdminThemeController extends Controller
 
         Cache::forget('theme_settings');
 
-        return response()->json(['url' => $url]);
+        AuditLog::create([
+            'admin_id' => $request->user()->id,
+            'action' => 'theme.logo_upload',
+            'target_type' => 'ThemeSetting',
+            'target_id' => null,
+            'before' => null,
+            'after' => ['key' => $key, 'url' => $url],
+            'ip' => $request->ip(),
+            'user_agent' => $request->userAgent(),
+        ]);
+
+        return $this->success(['url' => $url]);
     }
 }

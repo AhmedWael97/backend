@@ -18,21 +18,19 @@ class AiController extends Controller
     {
         $domain = $this->authorizedDomain($request, $domainId);
 
-        return response()->json([
-            'data' => AudienceSegment::where('domain_id', $domain->id)->get(),
-        ]);
+        return $this->success(AudienceSegment::where('domain_id', $domain->id)->get());
     }
 
     public function suggestions(Request $request, int $domainId): JsonResponse
     {
         $domain = $this->authorizedDomain($request, $domainId);
 
-        return response()->json([
-            'data' => AiSuggestion::where('domain_id', $domain->id)
+        return $this->success(
+            AiSuggestion::where('domain_id', $domain->id)
                 ->where('is_dismissed', false)
                 ->orderByRaw("CASE priority WHEN 'high' THEN 1 WHEN 'medium' THEN 2 WHEN 'low' THEN 3 ELSE 4 END")
-                ->get(),
-        ]);
+                ->get()
+        );
     }
 
     public function analyze(Request $request, int $domainId): JsonResponse
@@ -46,16 +44,15 @@ class AiController extends Controller
         $used = (int) Redis::get($quotaKey);
 
         if ($maxRuns !== -1 && $used >= $maxRuns) {
-            return response()->json([
-                'message' => 'Monthly analysis quota reached.',
+            return $this->error('Monthly analysis quota reached.', 429, [
                 'used' => $used,
                 'limit' => $maxRuns,
-            ], 429);
+            ]);
         }
 
         AnalyzeDomainJob::dispatch($domain->id)->onQueue('ai');
 
-        return response()->json([
+        return $this->success([
             'message' => 'Analysis queued.',
             'used' => $used,
             'limit' => $maxRuns,
@@ -69,7 +66,7 @@ class AiController extends Controller
 
         $suggestion->update(['is_dismissed' => true]);
 
-        return response()->json(['message' => 'Suggestion dismissed.']);
+        return $this->success(['message' => 'Suggestion dismissed.']);
     }
 
     public function quotaStatus(Request $request, int $domainId): JsonResponse
@@ -82,7 +79,7 @@ class AiController extends Controller
 
         $lastReport = AiReport::where('domain_id', $domain->id)->latest('generated_at')->first();
 
-        return response()->json([
+        return $this->success([
             'used' => $used,
             'limit' => $maxRuns,
             'last_analyzed_at' => $lastReport?->generated_at,
@@ -94,7 +91,7 @@ class AiController extends Controller
      */
     public function chat(): JsonResponse
     {
-        return response()->json(['feature' => 'disabled', 'phase' => 2], 503);
+        return $this->error('Feature not yet available.', 503, ['phase' => 2]);
     }
 
     private function authorizedDomain(Request $request, int $domainId): Domain

@@ -1,4 +1,4 @@
-<?php
+﻿<?php
 
 namespace App\Http\Controllers\Domain;
 
@@ -11,11 +11,10 @@ use App\Models\Domain;
 use App\Models\DomainExclusion;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 
 class DomainController extends Controller
 {
-    public function index(Request $request): AnonymousResourceCollection
+    public function index(Request $request): JsonResponse
     {
         $domains = $request->user()
             ->domains()
@@ -23,7 +22,7 @@ class DomainController extends Controller
             ->latest()
             ->get();
 
-        return DomainResource::collection($domains);
+        return $this->success(DomainResource::collection($domains)->resolve());
     }
 
     public function store(StoreDomainRequest $request): JsonResponse
@@ -33,84 +32,84 @@ class DomainController extends Controller
         // Enforce domain limit for the user's active plan
         $limit = optional($user->subscription?->plan)->getLimit('domains', 1);
         if ($limit !== -1 && $user->domains()->count() >= $limit) {
-            return response()->json([
-                'message' => "Your plan allows up to {$limit} domain(s). Please upgrade to add more.",
-            ], 422);
+            return $this->error("Your plan allows up to {$limit} domain(s). Please upgrade to add more.", 422);
         }
 
-        // Reject duplicate domain for this user
         if ($user->domains()->where('domain', $request->domain)->exists()) {
-            return response()->json(['message' => 'This domain is already registered.'], 422);
+            return $this->error('This domain is already registered.', 422);
         }
 
         $domain = $user->domains()->create([
-            'domain' => strtolower(trim($request->domain)),
+            'domain'   => $request->domain,
+            'timezone' => $request->input('timezone', 'UTC'),
             'settings' => $request->input('settings', []),
-            'active' => true,
+            'active'   => true,
         ]);
 
-        return (new DomainResource($domain))->response()->setStatusCode(201);
+        return $this->success((new DomainResource($domain))->resolve(), 201);
     }
 
-    public function show(Request $request, Domain $domain): DomainResource|JsonResponse
+    public function show(Request $request, Domain $domain): JsonResponse
     {
         if ($domain->user_id !== $request->user()->id) {
-            return response()->json(['message' => 'Not found.'], 404);
+            return $this->error('Not found.', 404);
         }
 
-        return new DomainResource($domain);
+        return $this->success((new DomainResource($domain))->resolve());
     }
 
-    public function update(UpdateDomainRequest $request, Domain $domain): DomainResource|JsonResponse
+    public function update(UpdateDomainRequest $request, Domain $domain): JsonResponse
     {
         if ($domain->user_id !== $request->user()->id) {
-            return response()->json(['message' => 'Not found.'], 404);
+            return $this->error('Not found.', 404);
         }
 
         $domain->update($request->validated());
 
-        return new DomainResource($domain);
+        return $this->success((new DomainResource($domain))->resolve());
     }
 
     public function destroy(Request $request, Domain $domain): JsonResponse
     {
         if ($domain->user_id !== $request->user()->id) {
-            return response()->json(['message' => 'Not found.'], 404);
+            return $this->error('Not found.', 404);
         }
 
         $domain->delete();
 
-        return response()->json(['message' => 'Domain deleted.']);
+        return $this->success(['message' => 'Domain deleted.']);
     }
 
     /**
-     * Rotate the tracking script token.
+     * POST /api/domains/{domain}/rotate-token
+     * Rotate the domain script token.
      * Old token remains valid for 60 minutes (grace period).
      */
     public function rotateToken(Request $request, Domain $domain): JsonResponse
     {
         if ($domain->user_id !== $request->user()->id) {
-            return response()->json(['message' => 'Not found.'], 404);
+            return $this->error('Not found.', 404);
         }
 
         $domain->rotateToken();
 
-        return response()->json([
-            'message' => 'Token rotated. Old token valid for 60 minutes.',
-            'script_token' => $domain->script_token,
+        return $this->success([
+            'message'               => 'Token rotated. Old token valid for 60 minutes.',
+            'script_token'          => $domain->script_token,
             'previous_script_token' => $domain->previous_script_token,
-            'token_rotated_at' => $domain->token_rotated_at,
+            'token_rotated_at'      => $domain->token_rotated_at,
         ]);
     }
 
     /**
+     * GET /api/domains/{domain}/verify-script
      * Verify the tracking script is installed on the domain.
      * Checks for a beacon hit recorded in cache by the tracker.
      */
     public function verifyScript(Request $request, Domain $domain): JsonResponse
     {
         if ($domain->user_id !== $request->user()->id) {
-            return response()->json(['message' => 'Not found.'], 404);
+            return $this->error('Not found.', 404);
         }
 
         $verified = cache()->has("script_verified:{$domain->script_token}");
@@ -120,8 +119,8 @@ class DomainController extends Controller
             cache()->forget("script_verified:{$domain->script_token}");
         }
 
-        return response()->json([
-            'verified' => $verified || $domain->isScriptVerified(),
+        return $this->success([
+            'verified'           => $verified || $domain->isScriptVerified(),
             'script_verified_at' => $domain->fresh()->script_verified_at,
         ]);
     }
@@ -131,16 +130,16 @@ class DomainController extends Controller
     public function listExclusions(Request $request, Domain $domain): JsonResponse
     {
         if ($domain->user_id !== $request->user()->id) {
-            return response()->json(['message' => 'Not found.'], 404);
+            return $this->error('Not found.', 404);
         }
 
-        return response()->json($domain->exclusions()->get(['id', 'type', 'value', 'created_at']));
+        return $this->success($domain->exclusions()->get(['id', 'type', 'value', 'created_at']));
     }
 
     public function storeExclusion(StoreExclusionRequest $request, Domain $domain): JsonResponse
     {
         if ($domain->user_id !== $request->user()->id) {
-            return response()->json(['message' => 'Not found.'], 404);
+            return $this->error('Not found.', 404);
         }
 
         $data = $request->validated();
@@ -149,7 +148,6 @@ class DomainController extends Controller
         if (empty($data['value']) && $request->filled('pattern')) {
             $pattern = $request->input('pattern');
             $data['value'] = $pattern;
-            // Auto-detect type from pattern if not provided
             if (empty($data['type'])) {
                 $data['type'] = preg_match('/^[\d.*:\/\[\]]+$/', $pattern) ? 'ip' : 'user_agent';
             }
@@ -157,17 +155,17 @@ class DomainController extends Controller
 
         $exclusion = $domain->exclusions()->create($data);
 
-        return response()->json($exclusion, 201);
+        return $this->success($exclusion, 201);
     }
 
     public function destroyExclusion(Request $request, Domain $domain, DomainExclusion $exclusion): JsonResponse
     {
         if ($domain->user_id !== $request->user()->id || $exclusion->domain_id !== $domain->id) {
-            return response()->json(['message' => 'Not found.'], 404);
+            return $this->error('Not found.', 404);
         }
 
         $exclusion->delete();
 
-        return response()->json(['message' => 'Exclusion removed.']);
+        return $this->success(['message' => 'Exclusion removed.']);
     }
 }

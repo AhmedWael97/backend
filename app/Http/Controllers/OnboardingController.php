@@ -23,7 +23,7 @@ class OnboardingController extends Controller
             $status[$step] = (bool) ($onboarding[$step] ?? false);
         }
 
-        return response()->json(['data' => $status]);
+        return $this->success($status);
     }
 
     public function markStep(Request $request, string $step): JsonResponse
@@ -37,7 +37,7 @@ class OnboardingController extends Controller
         $onboarding[$step] = true;
         $user->update(['onboarding' => $onboarding]);
 
-        return response()->json([
+        return $this->success([
             'message' => "Step '{$step}' marked complete.",
             'data' => $onboarding,
         ]);

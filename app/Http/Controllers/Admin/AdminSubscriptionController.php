@@ -24,12 +24,12 @@ class AdminSubscriptionController extends Controller
             $query->whereHas('user', fn($q) => $q->where('name', 'like', "%{$search}%")->orWhere('email', 'like', "%{$search}%"));
         }
 
-        return response()->json($query->latest()->paginate(50));
+        return $this->paginated($query->latest()->paginate(50));
     }
 
     public function show(int $id): JsonResponse
     {
-        return response()->json(['data' => Subscription::with(['user', 'plan'])->findOrFail($id)]);
+        return $this->success(Subscription::with(['user', 'plan'])->findOrFail($id));
     }
 
     public function upgrade(Request $request, int $id): JsonResponse
@@ -41,7 +41,7 @@ class AdminSubscriptionController extends Controller
         $sub->update(['plan_id' => $data['plan_id'], 'status' => 'active']);
         $this->auditLog($request, 'subscription.change', 'Subscription', $id, $before, $data);
 
-        return response()->json(['message' => 'Subscription upgraded.', 'data' => $sub->fresh()]);
+        return $this->success(['message' => 'Subscription upgraded.', 'data' => $sub->fresh()]);
     }
 
     public function cancel(Request $request, int $id): JsonResponse
@@ -50,7 +50,7 @@ class AdminSubscriptionController extends Controller
         $sub->update(['status' => 'cancelled', 'cancelled_at' => now()]);
         $this->auditLog($request, 'subscription.cancel', 'Subscription', $id);
 
-        return response()->json(['message' => 'Subscription cancelled.']);
+        return $this->success(['message' => 'Subscription cancelled.']);
     }
 
     public function pause(Request $request, int $id): JsonResponse
@@ -58,7 +58,7 @@ class AdminSubscriptionController extends Controller
         $sub = Subscription::findOrFail($id);
         $sub->update(['status' => 'paused']);
 
-        return response()->json(['message' => 'Subscription paused.']);
+        return $this->success(['message' => 'Subscription paused.']);
     }
 
     public function resume(Request $request, int $id): JsonResponse
@@ -66,7 +66,7 @@ class AdminSubscriptionController extends Controller
         $sub = Subscription::findOrFail($id);
         $sub->update(['status' => 'active']);
 
-        return response()->json(['message' => 'Subscription resumed.']);
+        return $this->success(['message' => 'Subscription resumed.']);
     }
 
     /**
@@ -97,7 +97,7 @@ class AdminSubscriptionController extends Controller
 
         $this->auditLog($request, 'subscription.change', 'Subscription', $sub->id, [], $data);
 
-        return response()->json(['message' => 'Plan assigned.', 'data' => $sub], 201);
+        return $this->success(['message' => 'Plan assigned.', 'data' => $sub], 201);
     }
 
     private function auditLog(Request $request, string $action, string $type, int $id, array $before = [], array $after = []): void

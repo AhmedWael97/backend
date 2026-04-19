@@ -1,0 +1,4455 @@
+{
+    "openapi": "3.0.0",
+    "info": {
+        "title": "Eye Analytics API",
+        "description": "REST API for the Eye Analytics platform. All endpoints are prefixed with `/api/v1`.\r\n *\r\n * ## Authentication\r\n * Protected endpoints require a Sanctum bearer token obtained from `POST /api/v1/auth/login`.\r\n * Pass it as: `Authorization: Bearer {token}`\r\n *\r\n * ## App-level API Keys\r\n * Every request must also carry the shared frontend key pair:\r\n * - `X-Public-Key: pk_xxxx`\r\n * - `X-Secret-Key: sk_xxxx`\r\n * Generate these once with `php artisan app:generate-api-keys`.",
+        "contact": {
+            "email": "support@eye-analytics.com"
+        },
+        "version": "1.0.0"
+    },
+    "servers": [
+        {
+            "url": "/",
+            "description": "Current environment"
+        }
+    ],
+    "paths": {
+        "/api/v1/auth/login": {
+            "post": {
+                "tags": [
+                    "Auth"
+                ],
+                "summary": "Login and receive a bearer token",
+                "operationId": "d00f4d12443a970455f396756440af3f",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "email",
+                                    "password"
+                                ],
+                                "properties": {
+                                    "email": {
+                                        "type": "string",
+                                        "format": "email",
+                                        "example": "user@example.com"
+                                    },
+                                    "password": {
+                                        "type": "string",
+                                        "format": "password",
+                                        "example": "secret"
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Authenticated — returns token or 2FA challenge",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "token": {
+                                            "type": "string"
+                                        },
+                                        "user": {
+                                            "type": "object"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "Invalid credentials"
+                    },
+                    "403": {
+                        "description": "Account suspended"
+                    }
+                }
+            }
+        },
+        "/api/v1/auth/register": {
+            "post": {
+                "tags": [
+                    "Auth"
+                ],
+                "summary": "Register a new user account",
+                "operationId": "1bc076b4e4d21f72f56edfa37e6364c5",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "name",
+                                    "email",
+                                    "password",
+                                    "password_confirmation"
+                                ],
+                                "properties": {
+                                    "name": {
+                                        "type": "string",
+                                        "example": "John Doe"
+                                    },
+                                    "email": {
+                                        "type": "string",
+                                        "format": "email"
+                                    },
+                                    "password": {
+                                        "type": "string",
+                                        "format": "password"
+                                    },
+                                    "password_confirmation": {
+                                        "type": "string",
+                                        "format": "password"
+                                    },
+                                    "locale": {
+                                        "type": "string",
+                                        "example": "en"
+                                    },
+                                    "timezone": {
+                                        "type": "string",
+                                        "example": "UTC"
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "201": {
+                        "description": "Account created — returns token"
+                    },
+                    "422": {
+                        "description": "Validation error"
+                    }
+                }
+            }
+        },
+        "/api/v1/health": {
+            "get": {
+                "tags": [
+                    "Health"
+                ],
+                "summary": "Service health check",
+                "operationId": "5c314677ccfefc5e8fdee147503287e7",
+                "responses": {
+                    "200": {
+                        "description": "All services healthy",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "status": {
+                                            "type": "string",
+                                            "example": "ok"
+                                        },
+                                        "checks": {
+                                            "type": "object"
+                                        },
+                                        "latency_ms": {
+                                            "type": "object"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "503": {
+                        "description": "One or more services degraded"
+                    }
+                }
+            }
+        },
+        "/api/v1/theme": {
+            "get": {
+                "tags": [
+                    "Health"
+                ],
+                "summary": "Get the active white-label theme settings",
+                "description": "============================================================\nGlobal API Info & Security\n============================================================",
+                "operationId": "c52028b645e0004a35ff75cc3a6d1b26",
+                "responses": {
+                    "200": {
+                        "description": "Theme object"
+                    }
+                }
+            }
+        },
+        "/api/v1/track": {
+            "post": {
+                "tags": [
+                    "Tracker"
+                ],
+                "summary": "Ingest a tracking event from the tracker script",
+                "operationId": "2a319ef4ec852cc7a39b68d8b42527a5",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "properties": {
+                                    "payload": {
+                                        "type": "object"
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Event accepted"
+                    }
+                }
+            }
+        },
+        "/api/v1/track/optout": {
+            "post": {
+                "tags": [
+                    "Tracker"
+                ],
+                "summary": "Opt a visitor out of tracking",
+                "operationId": "4d5e7234e2b468a7f825c243d7822d5c",
+                "responses": {
+                    "200": {
+                        "description": "Opt-out recorded"
+                    }
+                }
+            }
+        },
+        "/api/v1/auth/two-factor/verify": {
+            "post": {
+                "tags": [
+                    "Auth"
+                ],
+                "summary": "Complete a 2FA login challenge",
+                "operationId": "716c27d060268c26f88a37b7eb508aca",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "challenge",
+                                    "code"
+                                ],
+                                "properties": {
+                                    "challenge": {
+                                        "type": "string"
+                                    },
+                                    "code": {
+                                        "type": "string",
+                                        "example": "123456"
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Authenticated — returns token"
+                    },
+                    "422": {
+                        "description": "Invalid or expired code"
+                    }
+                }
+            }
+        },
+        "/api/v1/auth/forgot-password": {
+            "post": {
+                "tags": [
+                    "Auth"
+                ],
+                "summary": "Send a password reset link",
+                "operationId": "1752f0d5646a8ca00174f6fd10ee5024",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "email"
+                                ],
+                                "properties": {
+                                    "email": {
+                                        "type": "string",
+                                        "format": "email"
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Reset link sent"
+                    }
+                }
+            }
+        },
+        "/api/v1/auth/reset-password": {
+            "post": {
+                "tags": [
+                    "Auth"
+                ],
+                "summary": "Reset password using a token from the email link",
+                "operationId": "5e915e947a0a81f2fabce7b0c4ae084c",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "token",
+                                    "email",
+                                    "password",
+                                    "password_confirmation"
+                                ],
+                                "properties": {
+                                    "token": {
+                                        "type": "string"
+                                    },
+                                    "email": {
+                                        "type": "string",
+                                        "format": "email"
+                                    },
+                                    "password": {
+                                        "type": "string",
+                                        "format": "password"
+                                    },
+                                    "password_confirmation": {
+                                        "type": "string",
+                                        "format": "password"
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Password reset"
+                    }
+                }
+            }
+        },
+        "/api/v1/auth/email/verify/{id}/{hash}": {
+            "get": {
+                "tags": [
+                    "Auth"
+                ],
+                "summary": "Verify email address via signed link",
+                "operationId": "be893f3d15a1cd7a41df9ec234e6f597",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    },
+                    {
+                        "name": "hash",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Email verified"
+                    }
+                }
+            }
+        },
+        "/api/v1/auth/logout": {
+            "post": {
+                "tags": [
+                    "Auth"
+                ],
+                "summary": "Revoke the current access token",
+                "operationId": "b4c06466d0a19f14831ab3558de8e13d",
+                "responses": {
+                    "200": {
+                        "description": "Logged out"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/v1/auth/email/resend-verification": {
+            "post": {
+                "tags": [
+                    "Auth"
+                ],
+                "summary": "Resend the email verification link",
+                "operationId": "78dac598caa393bd8e00322efc65634f",
+                "responses": {
+                    "200": {
+                        "description": "Verification email sent"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/v1/auth/two-factor/setup": {
+            "post": {
+                "tags": [
+                    "Auth"
+                ],
+                "summary": "Generate a new TOTP secret and QR code",
+                "operationId": "849120da85a455718d6177e61b5904d2",
+                "responses": {
+                    "200": {
+                        "description": "TOTP secret and QR code PNG data URI"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/v1/auth/two-factor/enable": {
+            "post": {
+                "tags": [
+                    "Auth"
+                ],
+                "summary": "Confirm TOTP setup and enable 2FA",
+                "operationId": "92e44e64e285345ad805981148b5b50e",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "code"
+                                ],
+                                "properties": {
+                                    "code": {
+                                        "type": "string"
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "2FA enabled — backup codes returned"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/v1/auth/two-factor/disable": {
+            "delete": {
+                "tags": [
+                    "Auth"
+                ],
+                "summary": "Disable 2FA",
+                "operationId": "d29c134798393262c09dc2d7ade92048",
+                "responses": {
+                    "200": {
+                        "description": "2FA disabled"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/v1/profile": {
+            "get": {
+                "tags": [
+                    "Profile"
+                ],
+                "summary": "Get current user profile",
+                "operationId": "e133a7c51a77817fd2eaf5c31a3df91d",
+                "responses": {
+                    "200": {
+                        "description": "User object"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            },
+            "delete": {
+                "tags": [
+                    "Profile"
+                ],
+                "summary": "Delete account permanently",
+                "operationId": "946cb3be9a402f441df5ef74bb292102",
+                "responses": {
+                    "200": {
+                        "description": "Account deleted"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            },
+            "patch": {
+                "tags": [
+                    "Profile"
+                ],
+                "summary": "Update profile (name, locale, timezone, appearance)",
+                "operationId": "76b258b534e44113b93c059a580f5467",
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "properties": {
+                                    "name": {
+                                        "type": "string"
+                                    },
+                                    "locale": {
+                                        "type": "string"
+                                    },
+                                    "timezone": {
+                                        "type": "string"
+                                    },
+                                    "appearance": {
+                                        "type": "string",
+                                        "enum": [
+                                            "light",
+                                            "dark",
+                                            "system"
+                                        ]
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Profile updated"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/v1/profile/password": {
+            "put": {
+                "tags": [
+                    "Profile"
+                ],
+                "summary": "Change password (revokes all other sessions)",
+                "operationId": "1c58aa33e9eb1ffae86581d15c897ee9",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "current_password",
+                                    "password",
+                                    "password_confirmation"
+                                ],
+                                "properties": {
+                                    "current_password": {
+                                        "type": "string",
+                                        "format": "password"
+                                    },
+                                    "password": {
+                                        "type": "string",
+                                        "format": "password"
+                                    },
+                                    "password_confirmation": {
+                                        "type": "string",
+                                        "format": "password"
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Password changed — new token returned"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/v1/profile/api-key/regenerate": {
+            "post": {
+                "tags": [
+                    "Profile"
+                ],
+                "summary": "Regenerate the user's legacy API key",
+                "operationId": "dc64e0418b0ecb1514e756b0aee014b6",
+                "responses": {
+                    "200": {
+                        "description": "New API key"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/v1/profile/api-key": {
+            "get": {
+                "tags": [
+                    "Profile"
+                ],
+                "summary": "Get the user's current legacy API key",
+                "operationId": "f93a510e1a7656a595f2f4a418a91897",
+                "responses": {
+                    "200": {
+                        "description": "API key value"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/v1/profile/sessions": {
+            "get": {
+                "tags": [
+                    "Profile"
+                ],
+                "summary": "List all active Sanctum sessions",
+                "operationId": "9d91cd9a75496114803e2e744cbc74a7",
+                "responses": {
+                    "200": {
+                        "description": "List of tokens"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/v1/profile/sessions/{tokenId}": {
+            "delete": {
+                "tags": [
+                    "Profile"
+                ],
+                "summary": "Revoke a specific session token",
+                "operationId": "e3b16ea0e7dbf4c22443a122b423c9f9",
+                "parameters": [
+                    {
+                        "name": "tokenId",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Session revoked"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/v1/profile/preferences": {
+            "patch": {
+                "tags": [
+                    "Profile"
+                ],
+                "summary": "Update notification / display preferences",
+                "operationId": "5aa0294c3529956eb4d84195a6040033",
+                "responses": {
+                    "200": {
+                        "description": "Preferences updated"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/v1/profile/two-factor/status": {
+            "get": {
+                "tags": [
+                    "Profile"
+                ],
+                "summary": "Get 2FA status for the current user",
+                "operationId": "cdce50771ccc07113ea3455851196dfb",
+                "responses": {
+                    "200": {
+                        "description": "2FA status"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/v1/profile/two-factor/enable": {
+            "post": {
+                "tags": [
+                    "Profile"
+                ],
+                "summary": "Enable 2FA (profile context)",
+                "operationId": "8c3779dd1b198454c466649dd0d06356",
+                "responses": {
+                    "200": {
+                        "description": "2FA enabled"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/v1/profile/two-factor/confirm": {
+            "post": {
+                "tags": [
+                    "Profile"
+                ],
+                "summary": "Confirm and activate 2FA (profile context)",
+                "operationId": "8f6c95ac487bac6a99108167fd37fd1c",
+                "responses": {
+                    "200": {
+                        "description": "2FA confirmed"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/v1/profile/two-factor/disable": {
+            "post": {
+                "tags": [
+                    "Profile"
+                ],
+                "summary": "Disable 2FA (profile context)",
+                "operationId": "32ea5535c8869dfc597d592f6a9b7da1",
+                "responses": {
+                    "200": {
+                        "description": "2FA disabled"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/v1/onboarding": {
+            "get": {
+                "tags": [
+                    "Onboarding"
+                ],
+                "summary": "Get onboarding step completion status",
+                "operationId": "95b70b70b2205507c89214b7f6278272",
+                "responses": {
+                    "200": {
+                        "description": "Step status map"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/v1/onboarding/{step}": {
+            "patch": {
+                "tags": [
+                    "Onboarding"
+                ],
+                "summary": "Mark an onboarding step as complete",
+                "operationId": "15eeab5b31fc4206b117f50f3ba1428d",
+                "parameters": [
+                    {
+                        "name": "step",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "enum": [
+                                "domain_added",
+                                "script_installed",
+                                "first_event_received",
+                                "funnel_created"
+                            ]
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Step marked complete"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/v1/notifications": {
+            "get": {
+                "tags": [
+                    "Notifications"
+                ],
+                "summary": "List in-app notifications",
+                "operationId": "6030a79cb318fbf343c334072632818f",
+                "parameters": [
+                    {
+                        "name": "channel",
+                        "in": "query",
+                        "schema": {
+                            "type": "string",
+                            "enum": [
+                                "email",
+                                "in_app",
+                                "both"
+                            ]
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Notifications list with unread count"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            },
+            "delete": {
+                "tags": [
+                    "Notifications"
+                ],
+                "summary": "Clear all read notifications",
+                "operationId": "387fbc31a84b7bf84e34024339260652",
+                "responses": {
+                    "200": {
+                        "description": "Read notifications cleared"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/v1/notifications/{id}/read": {
+            "patch": {
+                "tags": [
+                    "Notifications"
+                ],
+                "summary": "Mark a notification as read",
+                "operationId": "a6417c273b081b4ee6c1631e09e3e0a0",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Marked as read"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/v1/notifications/read-all": {
+            "patch": {
+                "tags": [
+                    "Notifications"
+                ],
+                "summary": "Mark all notifications as read",
+                "operationId": "7cada7bf9be9bf0bf6afe80bb28a5114",
+                "responses": {
+                    "200": {
+                        "description": "All marked as read"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/v1/notifications/{id}": {
+            "delete": {
+                "tags": [
+                    "Notifications"
+                ],
+                "summary": "Delete a notification",
+                "operationId": "b86144b3d6270b2a14a07d140e2adda4",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Deleted"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/v1/notifications/unsubscribe/{token}": {
+            "get": {
+                "tags": [
+                    "Notifications"
+                ],
+                "summary": "One-click email unsubscribe via signed URL",
+                "operationId": "fea4c9e7ec385c3d8d691755183d2870",
+                "parameters": [
+                    {
+                        "name": "token",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "type",
+                        "in": "query",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "user",
+                        "in": "query",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Unsubscribed"
+                    }
+                }
+            }
+        },
+        "/api/v1/notification-preferences": {
+            "get": {
+                "tags": [
+                    "Notification Preferences"
+                ],
+                "summary": "Get notification preferences",
+                "operationId": "78243837ef944da1317c6e664caef798",
+                "responses": {
+                    "200": {
+                        "description": "List of per-type preferences"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            },
+            "patch": {
+                "tags": [
+                    "Notification Preferences"
+                ],
+                "summary": "Update notification preferences",
+                "operationId": "fcfb19294818434ade6d2e0576dd9b74",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "array",
+                                "items": {
+                                    "properties": {
+                                        "type": {
+                                            "type": "string"
+                                        },
+                                        "in_app": {
+                                            "type": "boolean"
+                                        },
+                                        "email": {
+                                            "type": "boolean"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Preferences updated"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/v1/billing": {
+            "get": {
+                "tags": [
+                    "Billing"
+                ],
+                "summary": "Get subscription, usage, limits, payments and available plans",
+                "operationId": "29170a5a024befaca4bbc3a44c8b73c7",
+                "responses": {
+                    "200": {
+                        "description": "Billing overview"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/v1/billing/subscribe": {
+            "post": {
+                "tags": [
+                    "Billing"
+                ],
+                "summary": "Subscribe to a plan",
+                "operationId": "2756b2d7299525d24bc3bdbc471c0d7d",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "plan_id"
+                                ],
+                                "properties": {
+                                    "plan_id": {
+                                        "type": "integer"
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Subscribed"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/v1/billing/cancel": {
+            "post": {
+                "tags": [
+                    "Billing"
+                ],
+                "summary": "Cancel the current subscription",
+                "operationId": "24fd347ae36a3dba7a50320bea048e93",
+                "responses": {
+                    "200": {
+                        "description": "Subscription cancelled"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/v1/gdpr/visitor": {
+            "delete": {
+                "tags": [
+                    "GDPR"
+                ],
+                "summary": "Queue deletion of all data for a visitor",
+                "operationId": "d5c0f851f11af25a0737217371d9efac",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "domain_id",
+                                    "visitor_id"
+                                ],
+                                "properties": {
+                                    "domain_id": {
+                                        "type": "integer"
+                                    },
+                                    "visitor_id": {
+                                        "type": "string"
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "202": {
+                        "description": "Deletion queued"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/v1/gdpr/optout-status": {
+            "get": {
+                "tags": [
+                    "GDPR"
+                ],
+                "summary": "Check if a visitor has opted out of tracking",
+                "operationId": "8ae69ecb19d80993e41cfd5a4ed5b3c8",
+                "parameters": [
+                    {
+                        "name": "domain_id",
+                        "in": "query",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    },
+                    {
+                        "name": "visitor_id",
+                        "in": "query",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Opt-out status"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/v1/exports": {
+            "post": {
+                "tags": [
+                    "Exports"
+                ],
+                "summary": "Queue a data export job",
+                "operationId": "380b650739b3d3a78dee0f7f75a142b3",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "domain_id",
+                                    "type",
+                                    "format"
+                                ],
+                                "properties": {
+                                    "domain_id": {
+                                        "type": "integer"
+                                    },
+                                    "type": {
+                                        "type": "string",
+                                        "enum": [
+                                            "visitors",
+                                            "events",
+                                            "funnel",
+                                            "ai"
+                                        ]
+                                    },
+                                    "format": {
+                                        "type": "string",
+                                        "enum": [
+                                            "csv",
+                                            "excel"
+                                        ]
+                                    },
+                                    "filters": {
+                                        "type": "object",
+                                        "nullable": true
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "202": {
+                        "description": "Export job queued"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/v1/exports/{id}": {
+            "get": {
+                "tags": [
+                    "Exports"
+                ],
+                "summary": "Get export job status",
+                "operationId": "26b3564055805a445944912ea9714196",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Export job details"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/v1/exports/{id}/download": {
+            "get": {
+                "tags": [
+                    "Exports"
+                ],
+                "summary": "Download the completed export file",
+                "operationId": "36693ba467cde94aa6c5fb44e97f6d70",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "File download"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/v1/shared-reports/{domainId}": {
+            "get": {
+                "tags": [
+                    "Shared Reports"
+                ],
+                "summary": "List shared report links for a domain",
+                "operationId": "efb9d0c5b2a686497b67c091bd9fc512",
+                "parameters": [
+                    {
+                        "name": "domainId",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Shared reports list"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/v1/shared-reports": {
+            "post": {
+                "tags": [
+                    "Shared Reports"
+                ],
+                "summary": "Create a shared report link",
+                "operationId": "30fbc8beb8fd06c82f4d74340aa3f2f5",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "domain_id",
+                                    "label"
+                                ],
+                                "properties": {
+                                    "domain_id": {
+                                        "type": "integer"
+                                    },
+                                    "label": {
+                                        "type": "string"
+                                    },
+                                    "allowed_pages": {
+                                        "type": "array",
+                                        "items": {
+                                            "type": "string"
+                                        },
+                                        "nullable": true
+                                    },
+                                    "expires_at": {
+                                        "type": "string",
+                                        "format": "date-time",
+                                        "nullable": true
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "201": {
+                        "description": "Shared report created"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/v1/shared-reports/{id}": {
+            "delete": {
+                "tags": [
+                    "Shared Reports"
+                ],
+                "summary": "Delete a shared report link",
+                "operationId": "3cf2656c85e8be24c2436b20c08cbe9c",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Deleted"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/v1/public/report/{token}": {
+            "get": {
+                "tags": [
+                    "Shared Reports"
+                ],
+                "summary": "View a public shared report (no auth required)",
+                "operationId": "38dd66b3e00dd897c03f66838461719c",
+                "parameters": [
+                    {
+                        "name": "token",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Report data"
+                    }
+                }
+            }
+        },
+        "/api/v1/domains/{domain}/saved-views": {
+            "get": {
+                "tags": [
+                    "Saved Views"
+                ],
+                "summary": "List saved views for a domain",
+                "operationId": "23adbfcded9bff8029624f24ac69b4a0",
+                "parameters": [
+                    {
+                        "name": "domain",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Saved views list"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            },
+            "post": {
+                "tags": [
+                    "Saved Views"
+                ],
+                "summary": "Create a saved view",
+                "operationId": "0b62d18b054810aa9dbb9f202a3c90ed",
+                "parameters": [
+                    {
+                        "name": "domain",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Saved view created"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/v1/domains/{domain}/saved-views/{view}": {
+            "delete": {
+                "tags": [
+                    "Saved Views"
+                ],
+                "summary": "Delete a saved view",
+                "operationId": "47f6c5b963b7a3e343b640286af01172",
+                "parameters": [
+                    {
+                        "name": "domain",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    },
+                    {
+                        "name": "view",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Deleted"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/v1/domains": {
+            "get": {
+                "tags": [
+                    "Domains"
+                ],
+                "summary": "List all domains for the authenticated user",
+                "operationId": "013d24f48f00f1269fbaef9d82decdea",
+                "responses": {
+                    "200": {
+                        "description": "Domain list"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            },
+            "post": {
+                "tags": [
+                    "Domains"
+                ],
+                "summary": "Add a new domain",
+                "operationId": "af387bd7b49a48f95069225ae774abe5",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "domain"
+                                ],
+                                "properties": {
+                                    "domain": {
+                                        "type": "string",
+                                        "example": "example.com"
+                                    },
+                                    "settings": {
+                                        "type": "object",
+                                        "nullable": true
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "201": {
+                        "description": "Domain created"
+                    },
+                    "422": {
+                        "description": "Duplicate domain or plan limit reached"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/v1/domains/{domain}": {
+            "get": {
+                "tags": [
+                    "Domains"
+                ],
+                "summary": "Get a domain",
+                "operationId": "255e4e534b306ce4f9b8bacb15d8a520",
+                "parameters": [
+                    {
+                        "name": "domain",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Domain resource"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            },
+            "delete": {
+                "tags": [
+                    "Domains"
+                ],
+                "summary": "Delete a domain and all its data",
+                "operationId": "e07e27e0aab086a810247747e97201a6",
+                "parameters": [
+                    {
+                        "name": "domain",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Domain deleted"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            },
+            "patch": {
+                "tags": [
+                    "Domains"
+                ],
+                "summary": "Update domain settings",
+                "operationId": "4c3b540226fd30a9ec02c69130fd4f7c",
+                "parameters": [
+                    {
+                        "name": "domain",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Domain updated"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/v1/domains/{domain}/rotate-token": {
+            "post": {
+                "tags": [
+                    "Domains"
+                ],
+                "summary": "Rotate the tracker script token",
+                "operationId": "9c20f80d76e5d59f42201336d245884d",
+                "parameters": [
+                    {
+                        "name": "domain",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "New token returned"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/v1/domains/{domain}/verify-script": {
+            "post": {
+                "tags": [
+                    "Domains"
+                ],
+                "summary": "Check if the tracker script is installed on the domain",
+                "operationId": "2b2bbd3522550792bb0d43c1530dfe1e",
+                "parameters": [
+                    {
+                        "name": "domain",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Script detection result"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/v1/domains/{domain}/snippet": {
+            "get": {
+                "tags": [
+                    "Domains"
+                ],
+                "summary": "Get the embeddable tracker script snippet",
+                "operationId": "3b5c6124a4c498886c5f1eb870dcdf03",
+                "parameters": [
+                    {
+                        "name": "domain",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Script snippet HTML"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/v1/domains/{domain}/exclusions": {
+            "get": {
+                "tags": [
+                    "Domains"
+                ],
+                "summary": "List IP/path exclusions for a domain",
+                "operationId": "a825d3be2698e1b52bdc5a9a7c0cf661",
+                "parameters": [
+                    {
+                        "name": "domain",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Exclusions list"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            },
+            "post": {
+                "tags": [
+                    "Domains"
+                ],
+                "summary": "Add an exclusion rule",
+                "operationId": "13b01ecc6dae5e14771a7a68ea1fe00a",
+                "parameters": [
+                    {
+                        "name": "domain",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Exclusion added"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/v1/domains/{domain}/exclusions/{exclusion}": {
+            "delete": {
+                "tags": [
+                    "Domains"
+                ],
+                "summary": "Remove an exclusion rule",
+                "operationId": "99514c9460117997dac0275674d1e30f",
+                "parameters": [
+                    {
+                        "name": "domain",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    },
+                    {
+                        "name": "exclusion",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Exclusion removed"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/v1/domains/{domain}/analytics/stats": {
+            "get": {
+                "tags": [
+                    "Analytics"
+                ],
+                "summary": "Get aggregated stats (sessions, pageviews, bounce rate, duration)",
+                "operationId": "48e45bfdfa0a937a520c8dc03a386d15",
+                "parameters": [
+                    {
+                        "name": "domain",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    },
+                    {
+                        "name": "start",
+                        "in": "query",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "format": "date"
+                        }
+                    },
+                    {
+                        "name": "end",
+                        "in": "query",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "format": "date"
+                        }
+                    },
+                    {
+                        "name": "granularity",
+                        "in": "query",
+                        "schema": {
+                            "type": "string",
+                            "enum": [
+                                "hour",
+                                "day",
+                                "week",
+                                "month"
+                            ]
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Stats data"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/v1/domains/{domain}/analytics/pages": {
+            "get": {
+                "tags": [
+                    "Analytics"
+                ],
+                "summary": "Top pages by pageviews",
+                "operationId": "9c00b34ddbe6d28c99c42c72c786f718",
+                "parameters": [
+                    {
+                        "name": "domain",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    },
+                    {
+                        "name": "start",
+                        "in": "query",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "format": "date"
+                        }
+                    },
+                    {
+                        "name": "end",
+                        "in": "query",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "format": "date"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Pages data"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/v1/domains/{domain}/analytics/referrers": {
+            "get": {
+                "tags": [
+                    "Analytics"
+                ],
+                "summary": "Top referrer sources",
+                "operationId": "e5b997bcd1987e5d755cec5c86670572",
+                "parameters": [
+                    {
+                        "name": "domain",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    },
+                    {
+                        "name": "start",
+                        "in": "query",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "format": "date"
+                        }
+                    },
+                    {
+                        "name": "end",
+                        "in": "query",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "format": "date"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Referrers data"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/v1/domains/{domain}/analytics/devices": {
+            "get": {
+                "tags": [
+                    "Analytics"
+                ],
+                "summary": "Breakdown by device, browser, OS",
+                "operationId": "7842ccdec4968715e79fc6e488ad7522",
+                "parameters": [
+                    {
+                        "name": "domain",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    },
+                    {
+                        "name": "start",
+                        "in": "query",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "format": "date"
+                        }
+                    },
+                    {
+                        "name": "end",
+                        "in": "query",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "format": "date"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Devices data"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/v1/domains/{domain}/analytics/geo": {
+            "get": {
+                "tags": [
+                    "Analytics"
+                ],
+                "summary": "Visitors by country and city",
+                "operationId": "33f076f1c425688ce46c2316d4a21e2c",
+                "parameters": [
+                    {
+                        "name": "domain",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    },
+                    {
+                        "name": "start",
+                        "in": "query",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "format": "date"
+                        }
+                    },
+                    {
+                        "name": "end",
+                        "in": "query",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "format": "date"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Geo data"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/v1/domains/{domain}/analytics/custom-events": {
+            "get": {
+                "tags": [
+                    "Analytics"
+                ],
+                "summary": "Custom event breakdown",
+                "operationId": "a2ffcdea039020a327e475c00a963325",
+                "parameters": [
+                    {
+                        "name": "domain",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    },
+                    {
+                        "name": "start",
+                        "in": "query",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "format": "date"
+                        }
+                    },
+                    {
+                        "name": "end",
+                        "in": "query",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "format": "date"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Custom events data"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/v1/domains/{domain}/analytics/realtime": {
+            "get": {
+                "tags": [
+                    "Realtime"
+                ],
+                "summary": "Active visitors right now",
+                "operationId": "a0d1c48f40b12f4a0427541204da08d8",
+                "parameters": [
+                    {
+                        "name": "domain",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Active visitor count and timestamp"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/v1/domains/{domain}/analytics/pipelines/{pipeline}/funnel": {
+            "get": {
+                "tags": [
+                    "Analytics"
+                ],
+                "summary": "Funnel conversion data for a pipeline",
+                "operationId": "abe32c9ff1ed31a63364fa8b21849e62",
+                "parameters": [
+                    {
+                        "name": "domain",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    },
+                    {
+                        "name": "pipeline",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Funnel steps with conversion rates"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/v1/analytics/{domainId}/overview": {
+            "get": {
+                "tags": [
+                    "Visitors"
+                ],
+                "summary": "Visitor overview (sessions, new vs returning)",
+                "operationId": "672a3d84da27395078371d89d7d948cf",
+                "parameters": [
+                    {
+                        "name": "domainId",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Visitor overview"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/v1/analytics/{domainId}/visitors": {
+            "get": {
+                "tags": [
+                    "Visitors"
+                ],
+                "summary": "Paginated visitor list with identity info",
+                "operationId": "c37e40ff793420e82220667b884ed335",
+                "parameters": [
+                    {
+                        "name": "domainId",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Visitors list"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/v1/analytics/{domainId}/visitors/{visitorId}": {
+            "get": {
+                "tags": [
+                    "Visitors"
+                ],
+                "summary": "Get a single visitor's session history",
+                "operationId": "1ad1b434b6c8fbce3602cfe3c1656fb5",
+                "parameters": [
+                    {
+                        "name": "domainId",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    },
+                    {
+                        "name": "visitorId",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Visitor detail"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/v1/analytics/{domainId}/identities": {
+            "get": {
+                "tags": [
+                    "Visitors"
+                ],
+                "summary": "List identified visitors (CRM-style)",
+                "operationId": "3e7c43a92f1e724fbe173a22db1f017d",
+                "parameters": [
+                    {
+                        "name": "domainId",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Identities list"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/v1/analytics/{domainId}/identities/{externalId}": {
+            "get": {
+                "tags": [
+                    "Visitors"
+                ],
+                "summary": "Get a single identified visitor",
+                "operationId": "e55da1c2c401f96b9354c9f29b4208ba",
+                "parameters": [
+                    {
+                        "name": "domainId",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    },
+                    {
+                        "name": "externalId",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Identity detail"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/v1/analytics/{domainId}/companies": {
+            "get": {
+                "tags": [
+                    "Visitors"
+                ],
+                "summary": "List enriched company records",
+                "operationId": "6ea012c74b8ac08cce472b9102af67d7",
+                "parameters": [
+                    {
+                        "name": "domainId",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Companies list"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/v1/analytics/{domainId}/companies/{companyDomain}": {
+            "get": {
+                "tags": [
+                    "Visitors"
+                ],
+                "summary": "Get enrichment data for a company",
+                "operationId": "dc80f13fa4d6ae62bbbfe65732bbd8ea",
+                "parameters": [
+                    {
+                        "name": "domainId",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    },
+                    {
+                        "name": "companyDomain",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Company enrichment detail"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/v1/domains/{domain}/webhooks": {
+            "get": {
+                "tags": [
+                    "Webhooks"
+                ],
+                "summary": "List webhooks for a domain",
+                "operationId": "82d12540d9f4fb0170c179d8c4e05f88",
+                "parameters": [
+                    {
+                        "name": "domain",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Webhooks list"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            },
+            "post": {
+                "tags": [
+                    "Webhooks"
+                ],
+                "summary": "Create a webhook",
+                "operationId": "0343330b1a74347231fbb42dbb6501fe",
+                "parameters": [
+                    {
+                        "name": "domain",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "url",
+                                    "events"
+                                ],
+                                "properties": {
+                                    "url": {
+                                        "type": "string",
+                                        "format": "uri"
+                                    },
+                                    "events": {
+                                        "type": "array",
+                                        "items": {
+                                            "type": "string"
+                                        }
+                                    },
+                                    "secret": {
+                                        "type": "string",
+                                        "nullable": true
+                                    },
+                                    "is_active": {
+                                        "type": "boolean"
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "201": {
+                        "description": "Webhook created"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/v1/domains/{domain}/webhooks/{webhook}": {
+            "put": {
+                "tags": [
+                    "Webhooks"
+                ],
+                "summary": "Update a webhook",
+                "operationId": "af0e8fd21b69f8dfb737210e87e08ab2",
+                "parameters": [
+                    {
+                        "name": "domain",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    },
+                    {
+                        "name": "webhook",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Webhook updated"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            },
+            "delete": {
+                "tags": [
+                    "Webhooks"
+                ],
+                "summary": "Delete a webhook",
+                "operationId": "58846682cc33517a1416407a4b1a42de",
+                "parameters": [
+                    {
+                        "name": "domain",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    },
+                    {
+                        "name": "webhook",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Webhook deleted"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/v1/domains/{domain}/webhooks/{webhook}/test": {
+            "post": {
+                "tags": [
+                    "Webhooks"
+                ],
+                "summary": "Send a test event to a webhook",
+                "operationId": "f502bbe80b52013a50fa76d3e6c87c1b",
+                "parameters": [
+                    {
+                        "name": "domain",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    },
+                    {
+                        "name": "webhook",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Test delivery result"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/v1/domains/{domain}/webhooks/{webhook}/logs": {
+            "get": {
+                "tags": [
+                    "Webhooks"
+                ],
+                "summary": "Get recent delivery logs for a webhook",
+                "operationId": "2591bd432d6513bd4a6b8dd87372ac11",
+                "parameters": [
+                    {
+                        "name": "domain",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    },
+                    {
+                        "name": "webhook",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Delivery logs"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/v1/domains/{domain}/alert-rules": {
+            "get": {
+                "tags": [
+                    "Alert Rules"
+                ],
+                "summary": "List alert rules for a domain",
+                "operationId": "d18166722c7344c1789938e7c55165dd",
+                "parameters": [
+                    {
+                        "name": "domain",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Alert rules list"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            },
+            "post": {
+                "tags": [
+                    "Alert Rules"
+                ],
+                "summary": "Create an alert rule",
+                "operationId": "ee2643396a84b52b7f86bb09647fb379",
+                "parameters": [
+                    {
+                        "name": "domain",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Alert rule created"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/v1/domains/{domain}/alert-rules/{rule}": {
+            "put": {
+                "tags": [
+                    "Alert Rules"
+                ],
+                "summary": "Update an alert rule",
+                "operationId": "04a04a38cb9c093656a8202ee0ad11b4",
+                "parameters": [
+                    {
+                        "name": "domain",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    },
+                    {
+                        "name": "rule",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Alert rule updated"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            },
+            "delete": {
+                "tags": [
+                    "Alert Rules"
+                ],
+                "summary": "Delete an alert rule",
+                "operationId": "8e2a8d69a1ff7de5ab990564f8ed997c",
+                "parameters": [
+                    {
+                        "name": "domain",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    },
+                    {
+                        "name": "rule",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Alert rule deleted"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/v1/domains/{domain}/pipelines": {
+            "get": {
+                "tags": [
+                    "Pipelines"
+                ],
+                "summary": "List pipelines for a domain",
+                "operationId": "e080129a9776b1a427b06e279ad4a4b8",
+                "parameters": [
+                    {
+                        "name": "domain",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Pipelines list"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            },
+            "post": {
+                "tags": [
+                    "Pipelines"
+                ],
+                "summary": "Create a pipeline",
+                "operationId": "ee18ea815ca9fdb6e70f39d84700cc0e",
+                "parameters": [
+                    {
+                        "name": "domain",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Pipeline created"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/v1/domains/{domain}/pipelines/{pipeline}": {
+            "put": {
+                "tags": [
+                    "Pipelines"
+                ],
+                "summary": "Update a pipeline",
+                "operationId": "40cbbeadfebaf650e5ac83735b924cce",
+                "parameters": [
+                    {
+                        "name": "domain",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    },
+                    {
+                        "name": "pipeline",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Pipeline updated"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            },
+            "delete": {
+                "tags": [
+                    "Pipelines"
+                ],
+                "summary": "Delete a pipeline",
+                "operationId": "5da65ac723a3cf61298c32c2914fa5be",
+                "parameters": [
+                    {
+                        "name": "domain",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    },
+                    {
+                        "name": "pipeline",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Pipeline deleted"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/v1/domains/{domain}/pipelines/{pipeline}/steps": {
+            "post": {
+                "tags": [
+                    "Pipelines"
+                ],
+                "summary": "Add a step to a pipeline",
+                "operationId": "6f8a23c098089d1ae785052c2c28af1e",
+                "parameters": [
+                    {
+                        "name": "domain",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    },
+                    {
+                        "name": "pipeline",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Step added"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/v1/domains/{domain}/pipelines/{pipeline}/steps/{step}": {
+            "delete": {
+                "tags": [
+                    "Pipelines"
+                ],
+                "summary": "Remove a step from a pipeline",
+                "operationId": "5b3084e7e720e322164e571acab1150b",
+                "parameters": [
+                    {
+                        "name": "domain",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    },
+                    {
+                        "name": "pipeline",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    },
+                    {
+                        "name": "step",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Step removed"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/v1/domains/{domain}/pipelines/{pipeline}/reorder": {
+            "post": {
+                "tags": [
+                    "Pipelines"
+                ],
+                "summary": "Reorder pipeline steps",
+                "operationId": "cea347c806136c741fe8bf639cabb5fc",
+                "parameters": [
+                    {
+                        "name": "domain",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    },
+                    {
+                        "name": "pipeline",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Steps reordered"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/v1/ux/{domainId}/score": {
+            "get": {
+                "tags": [
+                    "UX Intelligence"
+                ],
+                "summary": "Get the UX score for a domain",
+                "operationId": "6fe9c64b36fdf384c439f5b7bdc54196",
+                "parameters": [
+                    {
+                        "name": "domainId",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "UX score"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/v1/ux/{domainId}/issues": {
+            "get": {
+                "tags": [
+                    "UX Intelligence"
+                ],
+                "summary": "List UX issues detected for a domain",
+                "operationId": "a263b743174db597b2c98ce018892910",
+                "parameters": [
+                    {
+                        "name": "domainId",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "UX issues list"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/v1/ux/{domainId}/heatmap": {
+            "get": {
+                "tags": [
+                    "UX Intelligence"
+                ],
+                "summary": "Get heatmap click/scroll data",
+                "operationId": "007674b0584bfc0014d419cef51de03e",
+                "parameters": [
+                    {
+                        "name": "domainId",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    },
+                    {
+                        "name": "page",
+                        "in": "query",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Heatmap data"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/v1/ux/{domainId}/errors": {
+            "get": {
+                "tags": [
+                    "UX Intelligence"
+                ],
+                "summary": "Get JS error log for a domain",
+                "operationId": "ffbd27073b21ac1f3f9c597ab70654e6",
+                "parameters": [
+                    {
+                        "name": "domainId",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "JS errors list"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/v1/ai/{domainId}/segments": {
+            "get": {
+                "tags": [
+                    "AI"
+                ],
+                "summary": "List AI-generated audience segments",
+                "operationId": "1ad418f5a60d1f2bce1e9ee97acf3173",
+                "parameters": [
+                    {
+                        "name": "domainId",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Segments list"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/v1/ai/{domainId}/suggestions": {
+            "get": {
+                "tags": [
+                    "AI"
+                ],
+                "summary": "List active AI suggestions",
+                "operationId": "ef8ef03736e3b7b8c7e34622f1c43cbc",
+                "parameters": [
+                    {
+                        "name": "domainId",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Suggestions list (high → low priority)"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/v1/ai/{domainId}/analyze": {
+            "post": {
+                "tags": [
+                    "AI"
+                ],
+                "summary": "Trigger an AI analysis for a domain",
+                "operationId": "816f60b7e061fa045c67b97e2343d793",
+                "parameters": [
+                    {
+                        "name": "domainId",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "responses": {
+                    "202": {
+                        "description": "Analysis queued"
+                    },
+                    "429": {
+                        "description": "Monthly quota reached"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/v1/ai/{domainId}/quota": {
+            "get": {
+                "tags": [
+                    "AI"
+                ],
+                "summary": "Get AI analysis quota usage for the current month",
+                "operationId": "166ec52461978366ff4a30f3eab4a814",
+                "parameters": [
+                    {
+                        "name": "domainId",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Quota usage and limit"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/v1/ai/suggestions/{id}/dismiss": {
+            "patch": {
+                "tags": [
+                    "AI"
+                ],
+                "summary": "Dismiss an AI suggestion",
+                "operationId": "713f57ab357e8b150064879238f3b187",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Suggestion dismissed"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/v1/replay/{domainId}/sessions": {
+            "get": {
+                "tags": [
+                    "Session Replay"
+                ],
+                "summary": "[Phase 2] List session replays",
+                "operationId": "3826a733cf100c76acffed85c6c28814",
+                "parameters": [
+                    {
+                        "name": "domainId",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "responses": {
+                    "503": {
+                        "description": "Feature not yet available"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/v1/replay/{domainId}/sessions/{sessionId}": {
+            "get": {
+                "tags": [
+                    "Session Replay"
+                ],
+                "summary": "[Phase 2] Get a session replay",
+                "operationId": "e1bada795f90c1982ca55503082782ce",
+                "parameters": [
+                    {
+                        "name": "domainId",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    },
+                    {
+                        "name": "sessionId",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "503": {
+                        "description": "Feature not yet available"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/v1/admin/stats": {
+            "get": {
+                "tags": [
+                    "Admin"
+                ],
+                "summary": "Platform-wide statistics",
+                "operationId": "81a1c0dce8a7d857e588f791ed2e2223",
+                "responses": {
+                    "200": {
+                        "description": "Admin stats"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/v1/admin/users": {
+            "get": {
+                "tags": [
+                    "Admin"
+                ],
+                "summary": "List all users (paginated)",
+                "operationId": "9d79dcb200552540b1ce168860e008be",
+                "parameters": [
+                    {
+                        "name": "search",
+                        "in": "query",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "status",
+                        "in": "query",
+                        "schema": {
+                            "type": "string",
+                            "enum": [
+                                "active",
+                                "blocked",
+                                "suspended"
+                            ]
+                        }
+                    },
+                    {
+                        "name": "plan",
+                        "in": "query",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Paginated users"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/v1/admin/users/{id}": {
+            "get": {
+                "tags": [
+                    "Admin"
+                ],
+                "summary": "Get a user with subscription and domains",
+                "operationId": "befbba4799d69dbb718525f2b97ffb36",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "User detail"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            },
+            "delete": {
+                "tags": [
+                    "Admin"
+                ],
+                "summary": "Permanently delete a user",
+                "operationId": "888f55f861f7d848e873e050ea7e062c",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "User deleted"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            },
+            "patch": {
+                "tags": [
+                    "Admin"
+                ],
+                "summary": "Update a user (name, email, role, status)",
+                "operationId": "9a97ffebf4ea8715774f6c20abc98520",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "User updated"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/v1/admin/users/{id}/block": {
+            "post": {
+                "tags": [
+                    "Admin"
+                ],
+                "summary": "Block a user",
+                "operationId": "05b74c425df085afc7f7103d89022b74",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "User blocked"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/v1/admin/users/{id}/unblock": {
+            "post": {
+                "tags": [
+                    "Admin"
+                ],
+                "summary": "Unblock a user",
+                "operationId": "b5ec46946ae9c81197ed8eb2ce0f357e",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "User unblocked"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/v1/admin/users/{id}/impersonate": {
+            "post": {
+                "tags": [
+                    "Admin"
+                ],
+                "summary": "Impersonate a user (get their token)",
+                "operationId": "03cf40fa59d90c689bbb226c9db8dbe4",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Impersonation token"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/v1/admin/impersonate": {
+            "delete": {
+                "tags": [
+                    "Admin"
+                ],
+                "summary": "End impersonation session",
+                "operationId": "1184e3518bcb70caffd017fd4ed40798",
+                "responses": {
+                    "200": {
+                        "description": "Impersonation ended"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/v1/admin/users/{id}/disable-2fa": {
+            "post": {
+                "tags": [
+                    "Admin"
+                ],
+                "summary": "Force-disable 2FA for a user",
+                "operationId": "93bdf646b5f12ba535c1bb4c5583870e",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "2FA disabled"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/v1/admin/plans": {
+            "get": {
+                "tags": [
+                    "Admin"
+                ],
+                "summary": "List all plans",
+                "operationId": "ca02a02845122fd441d7aa206e598b96",
+                "responses": {
+                    "200": {
+                        "description": "Plans list"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            },
+            "post": {
+                "tags": [
+                    "Admin"
+                ],
+                "summary": "Create a plan",
+                "operationId": "cef12e846c39455738f3aada67662f33",
+                "responses": {
+                    "201": {
+                        "description": "Plan created"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/v1/admin/plans/{id}": {
+            "get": {
+                "tags": [
+                    "Admin"
+                ],
+                "summary": "Get a plan",
+                "operationId": "0846626202cddb944042c6e8aed44553",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Plan detail"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            },
+            "put": {
+                "tags": [
+                    "Admin"
+                ],
+                "summary": "Update a plan",
+                "operationId": "a4a559abeeb085f974c094e20d970b1c",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Plan updated"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            },
+            "delete": {
+                "tags": [
+                    "Admin"
+                ],
+                "summary": "Delete a plan",
+                "operationId": "c4b2aeab179e7ae66843ba731eabf9b9",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Plan deleted"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/v1/admin/plans/{id}/toggle-visibility": {
+            "patch": {
+                "tags": [
+                    "Admin"
+                ],
+                "summary": "Toggle plan public visibility",
+                "operationId": "1cb6d63eb098b5559ce3d0b3389071ca",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Visibility toggled"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/v1/admin/payment-methods": {
+            "get": {
+                "tags": [
+                    "Admin"
+                ],
+                "summary": "List available payment methods",
+                "operationId": "a1207ab6bceda2198471406512deee48",
+                "responses": {
+                    "200": {
+                        "description": "Payment methods list"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            },
+            "post": {
+                "tags": [
+                    "Admin"
+                ],
+                "summary": "Create a payment method",
+                "operationId": "8b80bc50887def4134dd161d94d0124e",
+                "responses": {
+                    "201": {
+                        "description": "Payment method created"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/v1/admin/payment-methods/{id}": {
+            "put": {
+                "tags": [
+                    "Admin"
+                ],
+                "summary": "Update a payment method",
+                "operationId": "2bfb7b11a641c636c0b7a206d22c9f03",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Payment method updated"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            },
+            "delete": {
+                "tags": [
+                    "Admin"
+                ],
+                "summary": "Delete a payment method",
+                "operationId": "4973a6a85fa4bebfaf30c472a9e0695b",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Payment method deleted"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/v1/admin/subscriptions": {
+            "get": {
+                "tags": [
+                    "Admin"
+                ],
+                "summary": "List all subscriptions",
+                "operationId": "80077dcb0c2d08040061745079ec5e44",
+                "responses": {
+                    "200": {
+                        "description": "Subscriptions list"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/v1/admin/subscriptions/{id}": {
+            "get": {
+                "tags": [
+                    "Admin"
+                ],
+                "summary": "Get a subscription",
+                "operationId": "6a3cade9877d6f0b11ae244e743d69c3",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Subscription detail"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/v1/admin/subscriptions/{id}/upgrade": {
+            "post": {
+                "tags": [
+                    "Admin"
+                ],
+                "summary": "Upgrade a subscription to a different plan",
+                "operationId": "d00f19df6a8ff3f6dfddaaa3f2a8e475",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Subscription upgraded"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/v1/admin/subscriptions/{id}/cancel": {
+            "post": {
+                "tags": [
+                    "Admin"
+                ],
+                "summary": "Cancel a subscription",
+                "operationId": "8179952eba21c352b6a66b0c03da8428",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Subscription cancelled"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/v1/admin/subscriptions/{id}/pause": {
+            "post": {
+                "tags": [
+                    "Admin"
+                ],
+                "summary": "Pause a subscription",
+                "operationId": "ece74ac9eea1dec2a5b8c59bfe86f272",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Subscription paused"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/v1/admin/subscriptions/{id}/resume": {
+            "post": {
+                "tags": [
+                    "Admin"
+                ],
+                "summary": "Resume a paused subscription",
+                "operationId": "38778b4508cabfc86104877a3b519173",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Subscription resumed"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/v1/admin/payments": {
+            "get": {
+                "tags": [
+                    "Admin"
+                ],
+                "summary": "List all payments",
+                "operationId": "b10ede19f4a6990205c433efbe49aa3f",
+                "responses": {
+                    "200": {
+                        "description": "Payments list"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/v1/admin/payments/{id}": {
+            "get": {
+                "tags": [
+                    "Admin"
+                ],
+                "summary": "Get a payment",
+                "operationId": "57e8813517fabc7f41f8d8eb11fb9a04",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Payment detail"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/v1/admin/payments/{id}/refund": {
+            "post": {
+                "tags": [
+                    "Admin"
+                ],
+                "summary": "Refund a payment",
+                "operationId": "67d46f740a72e89bb5d20d441bd08f38",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Payment refunded"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/v1/admin/domains": {
+            "get": {
+                "tags": [
+                    "Admin"
+                ],
+                "summary": "List all domains across all users",
+                "operationId": "a14772aa6418bfdc77dfce0701b71aa3",
+                "responses": {
+                    "200": {
+                        "description": "Domains list"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/v1/admin/domains/{id}": {
+            "delete": {
+                "tags": [
+                    "Admin"
+                ],
+                "summary": "Force-delete a domain",
+                "operationId": "918b23a1d46703be7e55362bb409ef55",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Domain deleted"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/v1/admin/theme": {
+            "get": {
+                "tags": [
+                    "Admin"
+                ],
+                "summary": "Get white-label theme settings",
+                "operationId": "4bb6db2b0aac7c3b60dac4486bb5e447",
+                "responses": {
+                    "200": {
+                        "description": "Theme settings"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            },
+            "put": {
+                "tags": [
+                    "Admin"
+                ],
+                "summary": "Update theme settings",
+                "operationId": "95a1495d2f4fdf891112de0e0a8f1ad5",
+                "responses": {
+                    "200": {
+                        "description": "Theme updated"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/v1/admin/theme/logo": {
+            "post": {
+                "tags": [
+                    "Admin"
+                ],
+                "summary": "Upload a new logo",
+                "operationId": "1db50981ee0e81f9a11aa79c38ca672f",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "multipart/form-data": {
+                            "schema": {
+                                "properties": {
+                                    "logo": {
+                                        "type": "string",
+                                        "format": "binary"
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Logo uploaded"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/v1/admin/audit-log": {
+            "get": {
+                "tags": [
+                    "Admin"
+                ],
+                "summary": "Get the admin audit log",
+                "operationId": "ea490cc1d38a69e8ac4d55e2ae562a8e",
+                "responses": {
+                    "200": {
+                        "description": "Audit log entries"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        }
+    },
+    "components": {
+        "securitySchemes": {
+            "sanctum": {
+                "type": "http",
+                "description": "Bearer token — obtain via POST /api/v1/auth/login",
+                "bearerFormat": "Token",
+                "scheme": "bearer"
+            }
+        }
+    },
+    "tags": [
+        {
+            "name": "Health",
+            "description": "Service health check"
+        },
+        {
+            "name": "Auth",
+            "description": "Register, login, logout, password reset, 2FA"
+        },
+        {
+            "name": "Profile",
+            "description": "User profile, password, sessions, API key"
+        },
+        {
+            "name": "Onboarding",
+            "description": "Onboarding step tracking"
+        },
+        {
+            "name": "Notifications",
+            "description": "In-app notifications"
+        },
+        {
+            "name": "Notification Preferences",
+            "description": "Per-type notification preferences"
+        },
+        {
+            "name": "Billing",
+            "description": "Subscriptions, plans, payment history"
+        },
+        {
+            "name": "GDPR",
+            "description": "Visitor data deletion and opt-out"
+        },
+        {
+            "name": "Exports",
+            "description": "Data export jobs (CSV / Excel)"
+        },
+        {
+            "name": "Shared Reports",
+            "description": "Publicly shareable analytics report links"
+        },
+        {
+            "name": "Saved Views",
+            "description": "Saved analytics filter views"
+        },
+        {
+            "name": "Domains",
+            "description": "Website / domain management"
+        },
+        {
+            "name": "Analytics",
+            "description": "Stats, pages, referrers, devices, geo, funnels"
+        },
+        {
+            "name": "Visitors",
+            "description": "Visitor identity and company enrichment"
+        },
+        {
+            "name": "Realtime",
+            "description": "Live visitor data"
+        },
+        {
+            "name": "Webhooks",
+            "description": "Domain webhook management"
+        },
+        {
+            "name": "Alert Rules",
+            "description": "Threshold-based alert rules"
+        },
+        {
+            "name": "Pipelines",
+            "description": "Conversion pipeline / funnel management"
+        },
+        {
+            "name": "UX Intelligence",
+            "description": "UX scores, issues, heatmaps, JS errors"
+        },
+        {
+            "name": "AI",
+            "description": "AI segments, suggestions, analysis"
+        },
+        {
+            "name": "Session Replay",
+            "description": "Session replay (Phase 2 — disabled)"
+        },
+        {
+            "name": "Tracker",
+            "description": "Public tracking ingestion endpoints"
+        },
+        {
+            "name": "Admin",
+            "description": "Superadmin — users, plans, billing, audit"
+        }
+    ]
+}

@@ -11,6 +11,7 @@
     "require": {
         "php": "^8.2",
         "chillerlan/php-qrcode": "^6.0",
+        "darkaonline/l5-swagger": "^8.6",
         "guzzlehttp/guzzle": "^7.10",
         "laravel/framework": "^12.0",
         "laravel/horizon": "^5.45",
@@ -20,7 +21,10 @@
         "maatwebsite/excel": "^3.1",
         "maxmind-db/reader": "^1.13",
         "pragmarx/google2fa-laravel": "^3.0",
-        "sentry/sentry-laravel": "^4.25"
+        "predis/predis": "^3.4",
+        "sentry/sentry-laravel": "^4.25",
+        "symfony/options-resolver": "^7.2|^8.0",
+        "symfony/psr-http-message-bridge": "^7.2|^8.0"
     },
     "require-dev": {
         "fakerphp/faker": "^1.23",

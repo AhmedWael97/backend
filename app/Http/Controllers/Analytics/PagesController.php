@@ -24,6 +24,6 @@ class PagesController extends BaseAnalyticsController
             $request->limit(),
         );
 
-        return response()->json(['data' => $pages]);
+        return $this->success($pages);
     }
 }

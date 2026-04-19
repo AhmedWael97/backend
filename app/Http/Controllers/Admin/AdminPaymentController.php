@@ -23,12 +23,12 @@ class AdminPaymentController extends Controller
         if ($to = $request->query('to'))
             $query->where('created_at', '<=', $to);
 
-        return response()->json($query->latest()->paginate(50));
+        return $this->paginated($query->latest()->paginate(50));
     }
 
     public function show(int $id): JsonResponse
     {
-        return response()->json(['data' => Payment::with(['user', 'plan'])->findOrFail($id)]);
+        return $this->success(Payment::with(['user', 'plan'])->findOrFail($id));
     }
 
     public function refund(Request $request, int $id): JsonResponse
@@ -36,7 +36,7 @@ class AdminPaymentController extends Controller
         $payment = Payment::findOrFail($id);
 
         if ($payment->status !== 'paid') {
-            return response()->json(['message' => 'Only paid payments can be refunded.'], 422);
+            return $this->error('Only paid payments can be refunded.', 422);
         }
 
         $before = ['status' => $payment->status];
@@ -53,6 +53,6 @@ class AdminPaymentController extends Controller
             'user_agent' => substr((string) $request->userAgent(), 0, 500),
         ]);
 
-        return response()->json(['message' => 'Payment refunded.']);
+        return $this->success(['message' => 'Payment refunded.']);
     }
 }

@@ -63,7 +63,7 @@ class UxIssuesController extends Controller
             WHERE {$where}
         ")[0]['c'] ?? 0);
 
-        return response()->json([
+        return $this->success([
             'data' => $rows,
             'total' => $total,
             'page' => $page,

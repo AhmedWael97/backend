@@ -19,7 +19,7 @@ class AdminDomainController extends Controller
                 ->orWhereHas('user', fn($q) => $q->where('email', 'like', "%{$search}%"));
         }
 
-        return response()->json($query->paginate(50));
+        return $this->paginated($query->paginate(50));
     }
 
     public function destroy(Request $request, int $id): JsonResponse
@@ -39,6 +39,6 @@ class AdminDomainController extends Controller
 
         $domain->delete();
 
-        return response()->json(['message' => 'Domain deleted.']);
+        return $this->success(['message' => 'Domain deleted.']);
     }
 }

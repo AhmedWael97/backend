@@ -13,7 +13,7 @@ class NotificationPreferenceController extends Controller
         $prefs = NotificationPreference::where('user_id', $request->user()->id)
             ->get(['type', 'in_app', 'email']);
 
-        return response()->json(['data' => $prefs]);
+        return $this->success($prefs);
     }
 
     public function update(Request $request): JsonResponse
@@ -33,7 +33,7 @@ class NotificationPreferenceController extends Controller
                 ]);
         }
 
-        return response()->json(['message' => 'Preferences updated.']);
+        return $this->success(['message' => 'Preferences updated.']);
     }
 
     /**
@@ -53,6 +53,6 @@ class NotificationPreferenceController extends Controller
             ->where('type', $type)
             ->update(['email' => false]);
 
-        return response()->json(['message' => "Unsubscribed from {$type} emails."]);
+        return $this->success(["message" => "Unsubscribed from {$type} emails."]);
     }
 }

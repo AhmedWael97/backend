@@ -21,7 +21,7 @@ class NotificationController extends Controller
 
         $notifications = $query->limit(50)->get();
 
-        return response()->json([
+        return $this->success([
             'data' => $notifications,
             'unread_count' => Notification::where('user_id', $request->user()->id)
                 ->whereNull('read_at')
@@ -36,7 +36,7 @@ class NotificationController extends Controller
 
         $notification->update(['read_at' => now()]);
 
-        return response()->json(['message' => 'Marked as read.']);
+        return $this->success(['message' => 'Marked as read.']);
     }
 
     public function markAllRead(Request $request): JsonResponse
@@ -45,7 +45,7 @@ class NotificationController extends Controller
             ->whereNull('read_at')
             ->update(['read_at' => now()]);
 
-        return response()->json(['message' => 'All notifications marked as read.']);
+        return $this->success(['message' => 'All notifications marked as read.']);
     }
 
     public function destroy(Request $request, int $id): JsonResponse
@@ -54,7 +54,7 @@ class NotificationController extends Controller
             ->findOrFail($id)
             ->delete();
 
-        return response()->json(['message' => 'Notification deleted.']);
+        return $this->success(['message' => 'Notification deleted.']);
     }
 
     public function clearRead(Request $request): JsonResponse
@@ -63,6 +63,6 @@ class NotificationController extends Controller
             ->whereNotNull('read_at')
             ->delete();
 
-        return response()->json(['message' => 'Read notifications cleared.']);
+        return $this->success(['message' => 'Read notifications cleared.']);
     }
 }

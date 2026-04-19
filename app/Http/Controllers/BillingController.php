@@ -40,21 +40,19 @@ class BillingController extends Controller
             ->orderBy('sort_order')
             ->get();
 
-        return response()->json([
-            'data' => [
-                'subscription' => $subscription ? [
-                    'id' => $subscription->id,
-                    'plan' => $plan,
-                    'status' => $subscription->status,
-                    'trial_ends_at' => null,
-                    'ends_at' => $subscription->cancelled_at?->toIso8601String(),
-                    'current_period_end' => $subscription->current_period_end?->toIso8601String(),
-                ] : null,
-                'usage' => ['domains' => $domains, 'pageviews' => $pageviews],
-                'limits' => ['domains' => $domainLimit, 'pageviews_per_month' => $pvLimit],
-                'payments' => $payments,
-                'plans' => $plans,
-            ],
+        return $this->success([
+            'subscription' => $subscription ? [
+                'id' => $subscription->id,
+                'plan' => $plan,
+                'status' => $subscription->status,
+                'trial_ends_at' => null,
+                'ends_at' => $subscription->cancelled_at?->toIso8601String(),
+                'current_period_end' => $subscription->current_period_end?->toIso8601String(),
+            ] : null,
+            'usage' => ['domains' => $domains, 'pageviews' => $pageviews],
+            'limits' => ['domains' => $domainLimit, 'pageviews_per_month' => $pvLimit],
+            'payments' => $payments,
+            'plans' => $plans,
         ]);
     }
 
@@ -85,7 +83,7 @@ class BillingController extends Controller
             'current_period_end' => now()->addMonth(),
         ]);
 
-        return response()->json([
+        return $this->success([
             'message' => "Switched to {$plan->name} plan.",
             'data' => $subscription->load('plan'),
         ]);
@@ -105,7 +103,7 @@ class BillingController extends Controller
             ->first();
 
         if (!$subscription) {
-            return response()->json(['message' => 'No active subscription found.'], 404);
+            return $this->error('No active subscription found.', 404);
         }
 
         $subscription->update([
@@ -113,6 +111,6 @@ class BillingController extends Controller
             'cancelled_at' => now(),
         ]);
 
-        return response()->json(['message' => 'Subscription cancelled at period end.']);
+        return $this->success(['message' => 'Subscription cancelled at period end.']);
     }
 }

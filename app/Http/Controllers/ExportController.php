@@ -35,7 +35,7 @@ class ExportController extends Controller
 
         ProcessExportJob::dispatch($export->id)->onQueue('exports');
 
-        return response()->json(['data' => $export], 202);
+        return $this->success($export, 202);
     }
 
     public function show(Request $request, int $id): JsonResponse
@@ -43,7 +43,7 @@ class ExportController extends Controller
         $export = ExportJob::where('user_id', $request->user()->id)
             ->findOrFail($id);
 
-        return response()->json(['data' => $export]);
+        return $this->success($export);
     }
 
     public function download(Request $request, int $id)

@@ -36,10 +36,14 @@ class IdentityController extends Controller
             ->get();
 
         return response()->json([
+            'statusCode' => 200,
+            'statusText' => 'success',
             'data' => $items,
-            'total' => $total,
-            'page' => $page,
-            'per_page' => $limit,
+            'meta' => [
+                'total' => $total,
+                'per_page' => $limit,
+                'current_page' => $page,
+            ],
         ]);
     }
 
@@ -53,6 +57,6 @@ class IdentityController extends Controller
             ->where('external_id', $externalId)
             ->firstOrFail();
 
-        return response()->json(['data' => $identity]);
+        return $this->success($identity);
     }
 }

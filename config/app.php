@@ -45,6 +45,20 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | App-level API Keys
+    |--------------------------------------------------------------------------
+    |
+    | A single public/secret key pair shared between this backend and the
+    | frontend application. Both values must be stored in .env on each side.
+    | Generate them once with: php artisan app:generate-api-keys
+    |
+    */
+
+    'api_public_key' => env('APP_PUBLIC_KEY'),
+    'api_secret_key' => env('APP_SECRET_KEY'),
+
+    /*
+    |--------------------------------------------------------------------------
     | Application URL
     |--------------------------------------------------------------------------
     |

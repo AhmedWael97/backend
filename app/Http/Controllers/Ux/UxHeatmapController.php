@@ -43,6 +43,6 @@ class UxHeatmapController extends Controller
             LIMIT 2000
         ");
 
-        return response()->json(['data' => $rows]);
+        return $this->success($rows);
     }
 }
