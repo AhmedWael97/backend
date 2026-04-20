@@ -116,6 +116,24 @@ class AdminUserController extends Controller
     }
 
     /**
+     * POST /api/admin/users/{id}/verify-email
+     * Manually mark the user's email as verified.
+     */
+    public function verifyEmail(Request $request, int $id): JsonResponse
+    {
+        $user = User::findOrFail($id);
+
+        if ($user->email_verified_at) {
+            return $this->success(['message' => 'Email is already verified.']);
+        }
+
+        $user->update(['email_verified_at' => now()]);
+        $this->auditLog($request, 'user.verify_email', 'User', $id);
+
+        return $this->success(['message' => 'Email verified successfully.']);
+    }
+
+    /**
      * POST /api/admin/users/{id}/disable-2fa
      */
     public function disable2fa(Request $request, int $id): JsonResponse

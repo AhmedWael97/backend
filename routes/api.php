@@ -394,6 +394,7 @@ Route::prefix('v1')->middleware('api.key')->group(function () {
             Route::post('{id}/block', [AdminUserController::class, 'block'])->name('block');
             Route::post('{id}/unblock', [AdminUserController::class, 'unblock'])->name('unblock');
             Route::post('{id}/impersonate', [AdminUserController::class, 'impersonate'])->name('impersonate');
+            Route::post('{id}/verify-email', [AdminUserController::class, 'verifyEmail'])->name('verify-email');
             Route::post('{id}/disable-2fa', [AdminUserController::class, 'disable2fa'])->name('disable-2fa');
             Route::post('{id}/toggle-admin', [AdminUserController::class, 'toggleAdmin'])->name('toggle-admin');
             Route::delete('{id}', [AdminUserController::class, 'destroy'])->name('destroy');
