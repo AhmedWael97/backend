@@ -60,7 +60,7 @@ return Application::configure(basePath: dirname(__DIR__))
         $exceptions->render(function (Throwable $e, Request $request) use ($apiResponse) {
             if ($request->is('api/*')) {
                 $statusCode = 500;
-                $message = app()->isProduction() ? 'Server error.' : $e->getMessage();
+                $message = config('app.debug') ? $e->getMessage() . ' [' . get_class($e) . ']' : 'Server error.';
                 return $apiResponse($statusCode, $message);
             }
         });
