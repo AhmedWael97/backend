@@ -30,20 +30,20 @@ class DomainController extends Controller
         $user = $request->user();
 
         // Enforce domain limit for the user's active plan
-        $limit = optional($user->subscription?->plan)->getLimit('domains', 1);
-        if ($limit !== -1 && $user->domains()->count() >= $limit) {
-            return $this->error("Your plan allows up to {$limit} domain(s). Please upgrade to add more.", 422);
-        }
+        // $limit = optional($user->subscription?->plan)->getLimit('domains', 1);
+        // if ($limit !== -1 && $user->domains()->count() >= $limit) {
+        //     return $this->error("Your plan allows up to {$limit} domain(s). Please upgrade to add more.", 422);
+        // }
 
         if ($user->domains()->where('domain', $request->domain)->exists()) {
             return $this->error('This domain is already registered.', 422);
         }
 
         $domain = $user->domains()->create([
-            'domain'   => $request->domain,
+            'domain' => $request->domain,
             'timezone' => $request->input('timezone', 'UTC'),
             'settings' => $request->input('settings', []),
-            'active'   => true,
+            'active' => true,
         ]);
 
         return $this->success((new DomainResource($domain))->resolve(), 201);
@@ -94,10 +94,10 @@ class DomainController extends Controller
         $domain->rotateToken();
 
         return $this->success([
-            'message'               => 'Token rotated. Old token valid for 60 minutes.',
-            'script_token'          => $domain->script_token,
+            'message' => 'Token rotated. Old token valid for 60 minutes.',
+            'script_token' => $domain->script_token,
             'previous_script_token' => $domain->previous_script_token,
-            'token_rotated_at'      => $domain->token_rotated_at,
+            'token_rotated_at' => $domain->token_rotated_at,
         ]);
     }
 
@@ -120,7 +120,7 @@ class DomainController extends Controller
         }
 
         return $this->success([
-            'verified'           => $verified || $domain->isScriptVerified(),
+            'verified' => $verified || $domain->isScriptVerified(),
             'script_verified_at' => $domain->fresh()->script_verified_at,
         ]);
     }
