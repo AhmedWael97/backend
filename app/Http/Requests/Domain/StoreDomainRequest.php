@@ -14,7 +14,7 @@ class StoreDomainRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'domain' => ['required', 'string', 'max:253', 'regex:/^([a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}$/'],
+            'domain' => ['required', 'string', 'max:253'],
             'settings' => ['sometimes', 'array'],
         ];
     }
