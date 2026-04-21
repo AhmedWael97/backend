@@ -26,6 +26,17 @@ use Symfony\Component\HttpFoundation\Response;
  */
 class ApiKeyAuth
 {
+    private function apiError(string $message, int $status = 401): Response
+    {
+        return response()->json([
+            'statusCode' => $status,
+            'statusText' => 'failed',
+            'data' => [
+                'message' => $message,
+            ],
+        ], $status);
+    }
+
     public function handle(Request $request, Closure $next): Response
     {
         // Always pass OPTIONS preflight requests — browsers don't send auth headers on preflights.
@@ -51,9 +62,7 @@ class ApiKeyAuth
         $incomingSecret = $request->header('X-Secret-Key');
 
         if (!$incomingPublic || !$incomingSecret) {
-            return response()->json([
-                'message' => 'Missing API key headers. Send X-Public-Key and X-Secret-Key.',
-            ], 401);
+            return $this->apiError('Missing API key headers. Send X-Public-Key and X-Secret-Key.');
         }
 
         // Use hash_equals to prevent timing-based side-channel attacks.
@@ -61,9 +70,7 @@ class ApiKeyAuth
         $validSecret = hash_equals($expectedSecret, $incomingSecret);
 
         if (!$validPublic || !$validSecret) {
-            return response()->json([
-                'message' => 'Invalid API keys.',
-            ], 401);
+            return $this->apiError('Invalid API keys.');
         }
 
         return $next($request);
