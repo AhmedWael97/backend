@@ -9,9 +9,35 @@ use App\Models\NotificationPreference;
 use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Hash;
 
 class AdminUserController extends Controller
 {
+    /**
+     * POST /api/admin/users — create a new user account
+     */
+    public function store(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'name'     => ['required', 'string', 'max:255'],
+            'email'    => ['required', 'email', 'unique:users,email'],
+            'password' => ['required', 'string', 'min:8'],
+            'role'     => ['sometimes', 'in:user,superadmin'],
+        ]);
+
+        $user = User::create([
+            'name'              => $data['name'],
+            'email'             => $data['email'],
+            'password'          => Hash::make($data['password']),
+            'role'              => $data['role'] ?? 'user',
+            'email_verified_at' => now(),
+        ]);
+
+        $this->auditLog($request, 'user.create', 'User', $user->id, [], $user->only(['name', 'email', 'role']));
+
+        return $this->success($user->fresh(), 201);
+    }
+
     public function index(Request $request): JsonResponse
     {
         $query = User::where('role', 'user')

@@ -389,6 +389,7 @@ Route::prefix('v1')->middleware('api.key')->group(function () {
         // Users
         Route::prefix('users')->name('users.')->group(function () {
             Route::get('/', [AdminUserController::class, 'index'])->name('index');
+            Route::post('/', [AdminUserController::class, 'store'])->name('store');
             Route::get('{id}', [AdminUserController::class, 'show'])->name('show');
             Route::patch('{id}', [AdminUserController::class, 'update'])->name('update');
             Route::post('{id}/block', [AdminUserController::class, 'block'])->name('block');

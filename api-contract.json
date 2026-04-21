@@ -1,0 +1,1776 @@
+{
+  "meta": {
+    "title": "Eye Analytics Backend – Full API Contract",
+    "version": "1.0",
+    "base_url": "/api/v1",
+    "auth": "Sanctum Bearer Token (header: Authorization: Bearer <token>)",
+    "global_middleware": ["api.key"],
+    "response_envelope": {
+      "statusCode": "integer",
+      "statusText": "string (success | error | fail)",
+      "data": "mixed"
+    },
+    "date": "2026-04-21"
+  },
+
+  "status_codes": {
+    "200": "OK – Successful GET / PATCH / PUT / DELETE",
+    "201": "Created – Successful POST that creates a resource",
+    "202": "Accepted – Async job queued (exports, AI analysis)",
+    "204": "No Content – Successful action with no body (tracker events)",
+    "400": "Bad Request – Missing or invalid token",
+    "401": "Unauthorized – Invalid / expired Bearer token",
+    "403": "Forbidden – Account suspended, invalid signature, insufficient plan",
+    "404": "Not Found – Resource not found or not accessible",
+    "422": "Unprocessable Entity – Validation error, wrong credentials, quota hit",
+    "429": "Too Many Requests – Rate limit exceeded",
+    "503": "Service Unavailable – Phase-2 stub or health check failure"
+  },
+
+  "endpoints": {
+
+    "public": {
+
+      "health": {
+        "method": "GET",
+        "path": "/health",
+        "auth": false,
+        "responses": {
+          "200": { "status": "string", "checks": "object", "latency_ms": "integer" },
+          "503": { "status": "string", "checks": "object", "latency_ms": "integer" }
+        }
+      },
+
+      "theme": {
+        "method": "GET",
+        "path": "/theme",
+        "auth": false,
+        "responses": {
+          "200": { "data": "ThemeSettings object" }
+        }
+      },
+
+      "track_event": {
+        "method": "POST",
+        "path": "/track",
+        "auth": false,
+        "throttle": "300 / minute",
+        "body_single": {
+          "t": "string (script_token) – required",
+          "sid": "string (session_id) – required",
+          "vid": "string (visitor_id) – required",
+          "e": "string (pageview | custom) – required",
+          "u": "string (URL) – required",
+          "r": "string (referrer) – optional",
+          "pt": "string (page title) – optional",
+          "p": "object (custom properties) – optional",
+          "sw": "integer (screen width) – optional",
+          "sh": "integer (screen height) – optional",
+          "d": "integer (duration ms) – optional"
+        },
+        "body_batch": "Array of single-event objects",
+        "responses": {
+          "204": "No Content",
+          "400": { "message": "string" },
+          "401": { "message": "string" }
+        }
+      },
+
+      "track_optout": {
+        "method": "POST",
+        "path": "/track/optout",
+        "auth": false,
+        "responses": { "204": "No Content" }
+      },
+
+      "cors_preflight": {
+        "method": "OPTIONS",
+        "path": "/track",
+        "auth": false,
+        "responses": { "204": "No Content" }
+      },
+
+      "register": {
+        "method": "POST",
+        "path": "/auth/register",
+        "auth": false,
+        "body": {
+          "name": "string|required|max:255",
+          "email": "email|required|unique",
+          "password": "string|required|min:8|confirmed",
+          "locale": "string|optional|in:en,ar",
+          "timezone": "string|optional|valid timezone"
+        },
+        "responses": {
+          "201": { "data": { "user": "UserObject", "token": "string" } },
+          "422": { "message": "string", "errors": "object" }
+        }
+      },
+
+      "login": {
+        "method": "POST",
+        "path": "/auth/login",
+        "auth": false,
+        "body": {
+          "email": "email|required",
+          "password": "string|required"
+        },
+        "responses": {
+          "200": {
+            "scenario_token": { "data": { "user": "UserObject", "token": "string" } },
+            "scenario_2fa": { "data": { "two_factor_required": true, "two_factor_token": "string" } }
+          },
+          "422": { "message": "string", "errors": "object" },
+          "403": { "message": "Account suspended" }
+        }
+      },
+
+      "two_factor_verify": {
+        "method": "POST",
+        "path": "/auth/two-factor/verify",
+        "auth": false,
+        "body": { "code": "string|required (TOTP code)" },
+        "responses": {
+          "200": { "data": { "user": "UserObject", "token": "string" } },
+          "404": { "message": "string" },
+          "422": { "message": "string", "errors": "object" }
+        }
+      },
+
+      "forgot_password": {
+        "method": "POST",
+        "path": "/auth/forgot-password",
+        "auth": false,
+        "body": { "email": "email|required" },
+        "responses": {
+          "200": { "data": { "message": "string" } },
+          "422": { "message": "string", "errors": "object" }
+        }
+      },
+
+      "reset_password": {
+        "method": "POST",
+        "path": "/auth/reset-password",
+        "auth": false,
+        "body": {
+          "token": "string|required",
+          "email": "email|required",
+          "password": "string|required|min:8|confirmed"
+        },
+        "responses": {
+          "200": { "data": { "message": "string" } },
+          "422": { "message": "string", "errors": "object" }
+        }
+      },
+
+      "email_verify": {
+        "method": "GET",
+        "path": "/auth/email/verify/{id}/{hash}",
+        "auth": false,
+        "responses": {
+          "200": { "data": { "message": "string" } },
+          "403": { "message": "Invalid or expired verification link" }
+        }
+      },
+
+      "notification_unsubscribe": {
+        "method": "GET",
+        "path": "/notifications/unsubscribe/{token}",
+        "auth": false,
+        "note": "Signed URL required",
+        "responses": {
+          "200": { "data": { "message": "string" } },
+          "403": { "message": "Invalid signature" }
+        }
+      },
+
+      "public_shared_report": {
+        "method": "GET",
+        "path": "/public/report/{token}",
+        "auth": false,
+        "responses": {
+          "200": { "data": "ReportSnapshot object" },
+          "404": { "message": "string" }
+        }
+      }
+    },
+
+    "auth": {
+
+      "me": {
+        "method": "GET",
+        "path": "/auth/me",
+        "auth": true,
+        "responses": {
+          "200": { "data": "UserObject" },
+          "401": { "message": "Unauthenticated" }
+        }
+      },
+
+      "logout": {
+        "method": "POST",
+        "path": "/auth/logout",
+        "auth": true,
+        "responses": {
+          "200": { "data": { "message": "string" } }
+        }
+      },
+
+      "resend_verification": {
+        "method": "POST",
+        "path": "/auth/email/resend-verification",
+        "auth": true,
+        "responses": {
+          "200": { "data": { "message": "string" } }
+        }
+      },
+
+      "two_factor_setup": {
+        "method": "POST",
+        "path": "/auth/two-factor/setup",
+        "auth": true,
+        "responses": {
+          "200": { "data": { "secret": "string", "qr_code_url": "string (data URI)" } }
+        }
+      },
+
+      "two_factor_enable": {
+        "method": "POST",
+        "path": "/auth/two-factor/enable",
+        "auth": true,
+        "body": { "code": "string|required (TOTP code to confirm)" },
+        "responses": {
+          "200": { "data": { "message": "string", "backup_codes": ["string"] } },
+          "422": { "message": "string", "errors": "object" }
+        }
+      },
+
+      "two_factor_disable": {
+        "method": "DELETE",
+        "path": "/auth/two-factor/disable",
+        "auth": true,
+        "body": { "code": "string|required (TOTP code)" },
+        "responses": {
+          "200": { "data": { "message": "string" } },
+          "422": { "message": "string", "errors": "object" }
+        }
+      }
+    },
+
+    "profile": {
+
+      "show": {
+        "method": "GET",
+        "path": "/profile",
+        "auth": true,
+        "responses": {
+          "200": { "data": "UserObject" }
+        }
+      },
+
+      "update": {
+        "method": "PATCH",
+        "path": "/profile",
+        "auth": true,
+        "body": {
+          "name": "string|optional|max:255",
+          "locale": "string|optional|in:en,ar",
+          "timezone": "string|optional|valid timezone",
+          "appearance": "string|optional|in:light,dark,system"
+        },
+        "responses": {
+          "200": { "data": "UserObject" },
+          "422": { "message": "string", "errors": "object" }
+        }
+      },
+
+      "change_password": {
+        "method": "PUT",
+        "path": "/profile/password",
+        "auth": true,
+        "body": {
+          "current_password": "string|required",
+          "password": "string|required|min:8|mixedCase|numbers|confirmed"
+        },
+        "responses": {
+          "200": { "data": { "message": "string", "token": "string (new token)" } },
+          "422": { "message": "string", "errors": "object" }
+        }
+      },
+
+      "api_key_show": {
+        "method": "GET",
+        "path": "/profile/api-key",
+        "auth": true,
+        "responses": {
+          "200": { "data": { "api_key": "string" } }
+        }
+      },
+
+      "api_key_regenerate": {
+        "method": "POST",
+        "path": "/profile/api-key/regenerate",
+        "auth": true,
+        "responses": {
+          "200": { "data": { "message": "string", "api_key": "string" } }
+        }
+      },
+
+      "sessions_list": {
+        "method": "GET",
+        "path": "/profile/sessions",
+        "auth": true,
+        "responses": {
+          "200": { "data": [{ "id": "integer", "ip": "string", "user_agent": "string", "last_used_at": "ISO8601", "current": "boolean" }] }
+        }
+      },
+
+      "session_revoke": {
+        "method": "DELETE",
+        "path": "/profile/sessions/{tokenId}",
+        "auth": true,
+        "responses": {
+          "200": { "data": { "message": "string" } },
+          "404": { "message": "string" }
+        }
+      },
+
+      "preferences_update": {
+        "method": "PATCH",
+        "path": "/profile/preferences",
+        "auth": true,
+        "body": { "any_preference_key": "value" },
+        "responses": {
+          "200": { "data": "UserObject" }
+        }
+      },
+
+      "delete_account": {
+        "method": "DELETE",
+        "path": "/profile",
+        "auth": true,
+        "responses": {
+          "200": { "data": { "message": "string" } }
+        }
+      },
+
+      "two_factor_status": {
+        "method": "GET",
+        "path": "/profile/two-factor/status",
+        "auth": true,
+        "responses": {
+          "200": { "data": { "enabled": "boolean" } }
+        }
+      },
+
+      "two_factor_profile_enable": {
+        "method": "POST",
+        "path": "/profile/two-factor/enable",
+        "auth": true,
+        "body": { "password": "string|required" },
+        "responses": {
+          "200": { "data": { "qr_code": "string (data URI)", "secret": "string" } },
+          "422": { "message": "string", "errors": "object" }
+        }
+      },
+
+      "two_factor_profile_confirm": {
+        "method": "POST",
+        "path": "/profile/two-factor/confirm",
+        "auth": true,
+        "body": { "code": "string|required (TOTP)" },
+        "responses": {
+          "200": { "data": { "message": "string", "backup_codes": ["string"] } },
+          "422": { "message": "string", "errors": "object" }
+        }
+      },
+
+      "two_factor_profile_disable": {
+        "method": "POST",
+        "path": "/profile/two-factor/disable",
+        "auth": true,
+        "body": { "password": "string|required" },
+        "responses": {
+          "200": { "data": { "message": "string" } },
+          "422": { "message": "string", "errors": "object" }
+        }
+      }
+    },
+
+    "onboarding": {
+
+      "show": {
+        "method": "GET",
+        "path": "/onboarding",
+        "auth": true,
+        "responses": {
+          "200": {
+            "data": {
+              "domain_added": "boolean",
+              "script_installed": "boolean",
+              "first_event_received": "boolean",
+              "funnel_created": "boolean"
+            }
+          }
+        }
+      },
+
+      "mark_step": {
+        "method": "PATCH",
+        "path": "/onboarding/{step}",
+        "auth": true,
+        "path_params": { "step": "domain_added | script_installed | first_event_received | funnel_created" },
+        "responses": {
+          "200": { "data": { "message": "string", "data": "object" } },
+          "404": { "message": "string" }
+        }
+      }
+    },
+
+    "notifications": {
+
+      "list": {
+        "method": "GET",
+        "path": "/notifications",
+        "auth": true,
+        "query": { "channel": "string|optional" },
+        "responses": {
+          "200": {
+            "data": {
+              "data": [{ "id": "string (UUID)", "type": "string", "read_at": "ISO8601|null", "data": "object", "created_at": "ISO8601" }],
+              "unread_count": "integer"
+            }
+          }
+        }
+      },
+
+      "mark_read": {
+        "method": "PATCH",
+        "path": "/notifications/{id}/read",
+        "auth": true,
+        "responses": {
+          "200": { "data": { "message": "string" } },
+          "404": { "message": "string" }
+        }
+      },
+
+      "mark_all_read": {
+        "method": "PATCH",
+        "path": "/notifications/read-all",
+        "auth": true,
+        "responses": {
+          "200": { "data": { "message": "string" } }
+        }
+      },
+
+      "delete": {
+        "method": "DELETE",
+        "path": "/notifications/{id}",
+        "auth": true,
+        "responses": {
+          "200": { "data": { "message": "string" } }
+        }
+      },
+
+      "clear_read": {
+        "method": "DELETE",
+        "path": "/notifications",
+        "auth": true,
+        "responses": {
+          "200": { "data": { "message": "string" } }
+        }
+      }
+    },
+
+    "notification_preferences": {
+
+      "list": {
+        "method": "GET",
+        "path": "/notification-preferences",
+        "auth": true,
+        "responses": {
+          "200": {
+            "data": [{ "type": "string", "in_app": "boolean", "email": "boolean" }]
+          }
+        }
+      },
+
+      "update": {
+        "method": "PATCH",
+        "path": "/notification-preferences",
+        "auth": true,
+        "body": [{ "type": "string", "in_app": "boolean", "email": "boolean" }],
+        "responses": {
+          "200": { "data": { "message": "string" } }
+        }
+      }
+    },
+
+    "billing": {
+
+      "show": {
+        "method": "GET",
+        "path": "/billing",
+        "auth": true,
+        "responses": {
+          "200": {
+            "data": {
+              "subscription": {
+                "id": "integer",
+                "plan": "PlanObject",
+                "status": "active | cancelled | trialing | paused",
+                "ends_at": "ISO8601 | null",
+                "current_period_end": "ISO8601 | null"
+              },
+              "usage": { "domains": "integer", "pageviews": "integer" },
+              "limits": { "domains": "integer", "pageviews_per_month": "integer" },
+              "payments": ["PaymentObject"],
+              "plans": ["PlanObject"]
+            }
+          }
+        }
+      },
+
+      "subscribe": {
+        "method": "POST",
+        "path": "/billing/subscribe",
+        "auth": true,
+        "body": { "plan_id": "integer|required", "payment_method_id": "integer|optional" },
+        "responses": {
+          "200": { "data": { "message": "string", "data": "SubscriptionObject" } },
+          "422": { "message": "string", "errors": "object" }
+        }
+      },
+
+      "cancel": {
+        "method": "POST",
+        "path": "/billing/cancel",
+        "auth": true,
+        "responses": {
+          "200": { "data": { "message": "string" } },
+          "404": { "message": "string" }
+        }
+      }
+    },
+
+    "gdpr": {
+
+      "delete_visitor": {
+        "method": "DELETE",
+        "path": "/gdpr/visitor",
+        "auth": true,
+        "body": { "domain_id": "integer|required", "visitor_id": "string|required" },
+        "responses": {
+          "202": { "data": { "message": "string", "id": "string (job ID)" } }
+        }
+      },
+
+      "optout_status": {
+        "method": "GET",
+        "path": "/gdpr/optout-status",
+        "auth": true,
+        "query": { "domain_id": "integer|required", "visitor_id": "string|required" },
+        "responses": {
+          "200": { "data": { "opted_out": "boolean" } }
+        }
+      }
+    },
+
+    "exports": {
+
+      "create": {
+        "method": "POST",
+        "path": "/exports",
+        "auth": true,
+        "body": {
+          "domain_id": "integer|required",
+          "type": "string|required|in:visitors,events,funnel,ai",
+          "format": "string|required|in:csv,excel",
+          "filters": "object|optional"
+        },
+        "responses": {
+          "202": { "data": "ExportJobObject" },
+          "422": { "message": "string", "errors": "object" }
+        }
+      },
+
+      "show": {
+        "method": "GET",
+        "path": "/exports/{id}",
+        "auth": true,
+        "responses": {
+          "200": { "data": "ExportJobObject" },
+          "404": { "message": "string" }
+        }
+      },
+
+      "download": {
+        "method": "GET",
+        "path": "/exports/{id}/download",
+        "auth": true,
+        "responses": {
+          "200": "Binary file stream (Content-Disposition: attachment)",
+          "404": { "message": "string" }
+        }
+      }
+    },
+
+    "shared_reports": {
+
+      "list": {
+        "method": "GET",
+        "path": "/shared-reports/{domainId}",
+        "auth": true,
+        "responses": {
+          "200": { "data": ["SharedReportObject"] }
+        }
+      },
+
+      "create": {
+        "method": "POST",
+        "path": "/shared-reports",
+        "auth": true,
+        "body": {
+          "domain_id": "integer|required",
+          "label": "string|required",
+          "allowed_pages": ["string"],
+          "expires_at": "ISO8601|optional"
+        },
+        "responses": {
+          "201": { "data": "SharedReportObject" },
+          "422": { "message": "string", "errors": "object" }
+        }
+      },
+
+      "delete": {
+        "method": "DELETE",
+        "path": "/shared-reports/{id}",
+        "auth": true,
+        "responses": {
+          "200": { "data": { "message": "string" } }
+        }
+      }
+    },
+
+    "saved_views": {
+
+      "list": {
+        "method": "GET",
+        "path": "/domains/{domain}/saved-views",
+        "auth": true,
+        "responses": {
+          "200": { "data": ["SavedViewObject"] }
+        }
+      },
+
+      "create": {
+        "method": "POST",
+        "path": "/domains/{domain}/saved-views",
+        "auth": true,
+        "body": { "name": "string|required", "filters": "object|required" },
+        "responses": {
+          "201": { "data": "SavedViewObject" },
+          "422": { "message": "string", "errors": "object" }
+        }
+      },
+
+      "delete": {
+        "method": "DELETE",
+        "path": "/domains/{domain}/saved-views/{view}",
+        "auth": true,
+        "responses": {
+          "200": { "data": { "message": "string" } }
+        }
+      }
+    },
+
+    "domains": {
+
+      "list": {
+        "method": "GET",
+        "path": "/domains",
+        "auth": true,
+        "responses": {
+          "200": { "data": ["DomainResource"] }
+        }
+      },
+
+      "create": {
+        "method": "POST",
+        "path": "/domains",
+        "auth": true,
+        "body": {
+          "domain": "string|required|max:253|valid domain pattern",
+          "settings": "object|optional",
+          "timezone": "string|optional (default: UTC)"
+        },
+        "responses": {
+          "201": { "data": "DomainResource" },
+          "422": { "message": "string", "errors": "object" }
+        }
+      },
+
+      "show": {
+        "method": "GET",
+        "path": "/domains/{domain}",
+        "auth": true,
+        "responses": {
+          "200": { "data": "DomainResource" },
+          "404": { "message": "string" }
+        }
+      },
+
+      "update": {
+        "method": "PATCH",
+        "path": "/domains/{domain}",
+        "auth": true,
+        "body": {
+          "active": "boolean|optional",
+          "settings": "object|optional"
+        },
+        "responses": {
+          "200": { "data": "DomainResource" }
+        }
+      },
+
+      "delete": {
+        "method": "DELETE",
+        "path": "/domains/{domain}",
+        "auth": true,
+        "responses": {
+          "200": { "data": { "message": "string" } }
+        }
+      },
+
+      "rotate_token": {
+        "method": "POST",
+        "path": "/domains/{domain}/rotate-token",
+        "auth": true,
+        "responses": {
+          "200": {
+            "data": {
+              "message": "string",
+              "script_token": "string",
+              "previous_script_token": "string",
+              "token_rotated_at": "ISO8601"
+            }
+          }
+        }
+      },
+
+      "verify_script": {
+        "method": "GET",
+        "path": "/domains/{domain}/verify",
+        "auth": true,
+        "responses": {
+          "200": { "data": { "verified": "boolean", "script_verified_at": "ISO8601|null" } }
+        }
+      },
+
+      "snippet": {
+        "method": "GET",
+        "path": "/domains/{domain}/snippet",
+        "auth": true,
+        "responses": {
+          "200": "text/plain – HTML <script> snippet"
+        }
+      },
+
+      "exclusions_list": {
+        "method": "GET",
+        "path": "/domains/{domain}/exclusions",
+        "auth": true,
+        "responses": {
+          "200": { "data": [{ "id": "integer", "type": "ip|cookie|user_agent", "value": "string" }] }
+        }
+      },
+
+      "exclusions_create": {
+        "method": "POST",
+        "path": "/domains/{domain}/exclusions",
+        "auth": true,
+        "body": {
+          "type": "string|nullable|in:ip,cookie,user_agent",
+          "value": "string|nullable|max:500"
+        },
+        "responses": {
+          "201": { "data": { "id": "integer", "type": "string", "value": "string" } },
+          "422": { "message": "string", "errors": "object" }
+        }
+      },
+
+      "exclusions_delete": {
+        "method": "DELETE",
+        "path": "/domains/{domain}/exclusions/{exclusion}",
+        "auth": true,
+        "responses": {
+          "200": { "data": { "message": "string" } }
+        }
+      },
+
+      "webhooks_list": {
+        "method": "GET",
+        "path": "/domains/{domain}/webhooks",
+        "auth": true,
+        "responses": {
+          "200": { "data": ["WebhookObject"] }
+        }
+      },
+
+      "webhooks_create": {
+        "method": "POST",
+        "path": "/domains/{domain}/webhooks",
+        "auth": true,
+        "body": {
+          "url": "string|required|url",
+          "secret": "string|optional",
+          "events": ["string"],
+          "is_active": "boolean|optional"
+        },
+        "responses": {
+          "201": { "data": "WebhookObject" },
+          "422": { "message": "string", "errors": "object" }
+        }
+      },
+
+      "webhooks_update": {
+        "method": "PUT",
+        "path": "/domains/{domain}/webhooks/{webhook}",
+        "auth": true,
+        "body": {
+          "url": "string|optional",
+          "secret": "string|optional",
+          "events": ["string|optional"],
+          "is_active": "boolean|optional"
+        },
+        "responses": {
+          "200": { "data": "WebhookObject" }
+        }
+      },
+
+      "webhooks_delete": {
+        "method": "DELETE",
+        "path": "/domains/{domain}/webhooks/{webhook}",
+        "auth": true,
+        "responses": {
+          "200": { "data": { "message": "string" } }
+        }
+      },
+
+      "webhooks_test": {
+        "method": "POST",
+        "path": "/domains/{domain}/webhooks/{webhook}/test",
+        "auth": true,
+        "responses": {
+          "200": { "data": { "result": "string" } }
+        }
+      },
+
+      "webhooks_logs": {
+        "method": "GET",
+        "path": "/domains/{domain}/webhooks/{webhook}/logs",
+        "auth": true,
+        "responses": {
+          "200": { "data": ["WebhookDeliveryObject"] }
+        }
+      },
+
+      "alert_rules_list": {
+        "method": "GET",
+        "path": "/domains/{domain}/alert-rules",
+        "auth": true,
+        "responses": {
+          "200": { "data": ["AlertRuleObject"] }
+        }
+      },
+
+      "alert_rules_create": {
+        "method": "POST",
+        "path": "/domains/{domain}/alert-rules",
+        "auth": true,
+        "body": {
+          "metric": "string|required",
+          "condition": "string|required",
+          "threshold": "number|required",
+          "channel": "string|required|in:email,in_app"
+        },
+        "responses": {
+          "201": { "data": "AlertRuleObject" },
+          "422": { "message": "string", "errors": "object" }
+        }
+      },
+
+      "alert_rules_update": {
+        "method": "PUT",
+        "path": "/domains/{domain}/alert-rules/{rule}",
+        "auth": true,
+        "body": { "any_field": "optional update" },
+        "responses": {
+          "200": { "data": "AlertRuleObject" }
+        }
+      },
+
+      "alert_rules_delete": {
+        "method": "DELETE",
+        "path": "/domains/{domain}/alert-rules/{rule}",
+        "auth": true,
+        "responses": {
+          "200": { "data": { "message": "string" } }
+        }
+      },
+
+      "pipelines_list": {
+        "method": "GET",
+        "path": "/domains/{domain}/pipelines",
+        "auth": true,
+        "responses": {
+          "200": {
+            "data": [{
+              "id": "integer",
+              "name": "string",
+              "description": "string|null",
+              "steps": [{ "id": "integer", "name": "string", "url_pattern": "string", "match_type": "string", "position": "integer" }]
+            }]
+          }
+        }
+      },
+
+      "pipelines_create": {
+        "method": "POST",
+        "path": "/domains/{domain}/pipelines",
+        "auth": true,
+        "body": {
+          "name": "string|required",
+          "description": "string|optional",
+          "steps": [{ "name": "string", "url_pattern": "string", "match_type": "string|optional" }]
+        },
+        "responses": {
+          "201": { "data": "PipelineObject" },
+          "422": { "message": "string", "errors": "object" }
+        }
+      },
+
+      "pipelines_update": {
+        "method": "PUT",
+        "path": "/domains/{domain}/pipelines/{pipeline}",
+        "auth": true,
+        "body": { "name": "string|optional", "description": "string|optional" },
+        "responses": {
+          "200": { "data": "PipelineObject" }
+        }
+      },
+
+      "pipelines_delete": {
+        "method": "DELETE",
+        "path": "/domains/{domain}/pipelines/{pipeline}",
+        "auth": true,
+        "responses": {
+          "200": { "data": { "message": "string" } }
+        }
+      },
+
+      "pipeline_step_add": {
+        "method": "POST",
+        "path": "/domains/{domain}/pipelines/{pipeline}/steps",
+        "auth": true,
+        "body": {
+          "name": "string|required",
+          "url_pattern": "string|required",
+          "match_type": "string|optional"
+        },
+        "responses": {
+          "201": { "data": "PipelineStepObject" }
+        }
+      },
+
+      "pipeline_step_remove": {
+        "method": "DELETE",
+        "path": "/domains/{domain}/pipelines/{pipeline}/steps/{step}",
+        "auth": true,
+        "responses": {
+          "200": { "data": { "message": "string" } }
+        }
+      },
+
+      "pipeline_steps_reorder": {
+        "method": "POST",
+        "path": "/domains/{domain}/pipelines/{pipeline}/reorder",
+        "auth": true,
+        "body": { "steps": [{ "id": "integer", "position": "integer" }] },
+        "responses": {
+          "200": { "data": "PipelineObject (with reordered steps)" }
+        }
+      }
+    },
+
+    "analytics": {
+
+      "stats": {
+        "method": "GET",
+        "path": "/domains/{domain}/analytics/stats",
+        "auth": true,
+        "query": {
+          "start": "date|optional (default: 7 days ago)",
+          "end": "date|optional (default: now)",
+          "granularity": "string|optional|in:hour,day,week,month (default: day)",
+          "limit": "integer|optional|min:1|max:100 (default: 10)"
+        },
+        "responses": {
+          "200": {
+            "data": {
+              "summary": {
+                "unique_visitors": "integer",
+                "pageviews": "integer",
+                "sessions": "integer",
+                "bounce_rate": "decimal",
+                "avg_duration": "decimal"
+              },
+              "timeseries": [{ "period": "YYYY-MM-DD", "unique_visitors": "integer", "pageviews": "integer" }]
+            }
+          }
+        }
+      },
+
+      "pages": {
+        "method": "GET",
+        "path": "/domains/{domain}/analytics/pages",
+        "auth": true,
+        "query": { "start": "date", "end": "date", "granularity": "string", "limit": "integer" },
+        "responses": {
+          "200": { "data": [{ "url": "string", "pageviews": "integer", "unique_visitors": "integer" }] }
+        }
+      },
+
+      "referrers": {
+        "method": "GET",
+        "path": "/domains/{domain}/analytics/referrers",
+        "auth": true,
+        "query": { "start": "date", "end": "date", "limit": "integer" },
+        "responses": {
+          "200": { "data": [{ "referrer": "string", "visits": "integer" }] }
+        }
+      },
+
+      "devices": {
+        "method": "GET",
+        "path": "/domains/{domain}/analytics/devices",
+        "auth": true,
+        "query": { "start": "date", "end": "date" },
+        "responses": {
+          "200": {
+            "data": {
+              "device_types": [{ "type": "string", "count": "integer" }],
+              "browsers": [{ "browser": "string", "count": "integer" }],
+              "os": [{ "os": "string", "count": "integer" }]
+            }
+          }
+        }
+      },
+
+      "geo": {
+        "method": "GET",
+        "path": "/domains/{domain}/analytics/geo",
+        "auth": true,
+        "query": { "start": "date", "end": "date" },
+        "responses": {
+          "200": { "data": [{ "country": "string", "country_code": "string", "visitors": "integer" }] }
+        }
+      },
+
+      "custom_events": {
+        "method": "GET",
+        "path": "/domains/{domain}/analytics/custom-events",
+        "auth": true,
+        "query": { "start": "date", "end": "date", "limit": "integer" },
+        "responses": {
+          "200": { "data": [{ "name": "string", "count": "integer", "unique_visitors": "integer" }] }
+        }
+      },
+
+      "funnel": {
+        "method": "GET",
+        "path": "/domains/{domain}/analytics/pipelines/{pipeline}/funnel",
+        "auth": true,
+        "query": { "start": "date", "end": "date" },
+        "responses": {
+          "200": {
+            "data": {
+              "steps": [{ "name": "string", "visitors": "integer", "drop_off_rate": "decimal" }],
+              "overall_conversion": "decimal"
+            }
+          }
+        }
+      },
+
+      "realtime": {
+        "method": "GET",
+        "path": "/domains/{domain}/analytics/realtime",
+        "auth": true,
+        "responses": {
+          "200": { "data": { "active_visitors": "integer", "ts": "ISO8601" } }
+        }
+      },
+
+      "overview": {
+        "method": "GET",
+        "path": "/analytics/{domainId}/overview",
+        "auth": true,
+        "responses": {
+          "200": { "data": "Aggregated dashboard data object" }
+        }
+      },
+
+      "visitors_list": {
+        "method": "GET",
+        "path": "/analytics/{domainId}/visitors",
+        "auth": true,
+        "query": { "page": "integer", "per_page": "integer (default: 50)" },
+        "responses": {
+          "200": {
+            "data": [{ "visitor_id": "string", "last_seen": "ISO8601", "session_count": "integer", "device_type": "string", "country": "string", "browser": "string" }],
+            "meta": { "total": "integer", "per_page": 50, "current_page": "integer" }
+          }
+        }
+      },
+
+      "visitors_show": {
+        "method": "GET",
+        "path": "/analytics/{domainId}/visitors/{visitorId}",
+        "auth": true,
+        "responses": {
+          "200": { "data": { "visitor": "VisitorObject", "sessions": ["SessionObject"], "pageviews": ["PageviewObject"] } },
+          "404": { "message": "string" }
+        }
+      },
+
+      "identities_list": {
+        "method": "GET",
+        "path": "/analytics/{domainId}/identities",
+        "auth": true,
+        "responses": {
+          "200": { "data": ["IdentityObject"], "meta": "PaginationMeta" }
+        }
+      },
+
+      "identities_show": {
+        "method": "GET",
+        "path": "/analytics/{domainId}/identities/{externalId}",
+        "auth": true,
+        "responses": {
+          "200": { "data": "IdentityObject" },
+          "404": { "message": "string" }
+        }
+      },
+
+      "companies_list": {
+        "method": "GET",
+        "path": "/analytics/{domainId}/companies",
+        "auth": true,
+        "note": "Pro plan required",
+        "responses": {
+          "200": { "data": ["CompanyObject"], "meta": "PaginationMeta" },
+          "403": { "message": "Plan upgrade required" }
+        }
+      },
+
+      "companies_show": {
+        "method": "GET",
+        "path": "/analytics/{domainId}/companies/{companyDomain}",
+        "auth": true,
+        "note": "Pro plan required",
+        "responses": {
+          "200": { "data": "CompanyObject" },
+          "403": { "message": "Plan upgrade required" },
+          "404": { "message": "string" }
+        }
+      }
+    },
+
+    "ux_intelligence": {
+
+      "score": {
+        "method": "GET",
+        "path": "/ux/{domainId}/score",
+        "auth": true,
+        "responses": {
+          "200": {
+            "data": {
+              "score": "integer (0-100)",
+              "breakdown": { "performance": "integer", "engagement": "integer", "errors": "integer" },
+              "calculated_at": "ISO8601"
+            }
+          }
+        }
+      },
+
+      "issues": {
+        "method": "GET",
+        "path": "/ux/{domainId}/issues",
+        "auth": true,
+        "query": { "type": "string|optional", "url": "string|optional", "from": "date|optional", "to": "date|optional", "page": "integer|optional" },
+        "responses": {
+          "200": { "data": ["UxIssueObject"], "meta": "PaginationMeta" }
+        }
+      },
+
+      "heatmap": {
+        "method": "GET",
+        "path": "/ux/{domainId}/heatmap",
+        "auth": true,
+        "query": { "url": "string|required", "from": "date|optional", "to": "date|optional" },
+        "responses": {
+          "200": {
+            "data": {
+              "clicks": [{ "x": "integer", "y": "integer", "count": "integer" }],
+              "rage_clicks": [{ "x": "integer", "y": "integer", "count": "integer" }]
+            }
+          }
+        }
+      },
+
+      "errors": {
+        "method": "GET",
+        "path": "/ux/{domainId}/errors",
+        "auth": true,
+        "query": { "from": "date|optional", "to": "date|optional" },
+        "responses": {
+          "200": { "data": [{ "message": "string", "url": "string", "count": "integer", "last_seen": "ISO8601" }] }
+        }
+      }
+    },
+
+    "ai": {
+
+      "segments": {
+        "method": "GET",
+        "path": "/ai/{domainId}/segments",
+        "auth": true,
+        "responses": {
+          "200": { "data": ["AiSegmentObject"] }
+        }
+      },
+
+      "suggestions": {
+        "method": "GET",
+        "path": "/ai/{domainId}/suggestions",
+        "auth": true,
+        "responses": {
+          "200": { "data": ["AiSuggestionObject"] }
+        }
+      },
+
+      "analyze": {
+        "method": "POST",
+        "path": "/ai/{domainId}/analyze",
+        "auth": true,
+        "responses": {
+          "202": { "data": { "message": "string", "used": "integer", "limit": "integer" } },
+          "429": { "message": "Quota exceeded" }
+        }
+      },
+
+      "quota": {
+        "method": "GET",
+        "path": "/ai/{domainId}/quota",
+        "auth": true,
+        "responses": {
+          "200": { "data": { "used": "integer", "limit": "integer", "last_analyzed_at": "ISO8601|null" } }
+        }
+      },
+
+      "dismiss_suggestion": {
+        "method": "PATCH",
+        "path": "/ai/suggestions/{id}/dismiss",
+        "auth": true,
+        "responses": {
+          "200": { "data": { "message": "string" } }
+        }
+      },
+
+      "chat_stub": {
+        "method": "POST",
+        "path": "/ai/{domainId}/chat",
+        "auth": true,
+        "responses": {
+          "503": { "feature": "disabled", "phase": 2 }
+        }
+      }
+    },
+
+    "session_replay_stubs": {
+      "note": "All Phase-2 stubs – always return 503",
+      "endpoints": [
+        { "method": "GET",    "path": "/replay/{domainId}/sessions" },
+        { "method": "GET",    "path": "/replay/{domainId}/sessions/{sessionId}" },
+        { "method": "DELETE", "path": "/replay/{domainId}/sessions/{sessionId}" }
+      ],
+      "response": { "503": { "feature": "disabled", "phase": 2 } }
+    },
+
+    "chatbot_stubs": {
+      "note": "All Phase-2 stubs – always return 503",
+      "endpoints": [
+        { "method": "GET",    "path": "/chatbot/{domainId}/config" },
+        { "method": "PUT",    "path": "/chatbot/{domainId}/config" },
+        { "method": "GET",    "path": "/chatbot/{domainId}/conversations" },
+        { "method": "GET",    "path": "/chatbot/{domainId}/conversations/{id}" },
+        { "method": "DELETE", "path": "/chatbot/{domainId}/chat/{sessionId}" },
+        { "method": "POST",   "path": "/chatbot/widget/{token}/message" }
+      ],
+      "response": { "503": { "feature": "disabled", "phase": 2 } }
+    },
+
+    "admin": {
+
+      "stats": {
+        "method": "GET",
+        "path": "/admin/stats",
+        "auth": true,
+        "middleware": ["auth:sanctum", "superadmin"],
+        "responses": {
+          "200": {
+            "data": {
+              "total_users": "integer",
+              "active_users": "integer",
+              "active_subscriptions": "integer",
+              "mrr": "decimal",
+              "events_today": "integer",
+              "top_plans": ["PlanObject"]
+            }
+          }
+        }
+      },
+
+      "users_list": {
+        "method": "GET",
+        "path": "/admin/users",
+        "auth": true,
+        "middleware": ["auth:sanctum", "superadmin"],
+        "query": { "search": "string|optional", "status": "string|optional", "plan": "string|optional" },
+        "responses": {
+          "200": { "data": ["UserObject"], "meta": "PaginationMeta" }
+        }
+      },
+
+      "users_show": {
+        "method": "GET",
+        "path": "/admin/users/{id}",
+        "auth": true,
+        "middleware": ["auth:sanctum", "superadmin"],
+        "responses": {
+          "200": { "data": "UserObject" },
+          "404": { "message": "string" }
+        }
+      },
+
+      "users_update": {
+        "method": "PATCH",
+        "path": "/admin/users/{id}",
+        "auth": true,
+        "middleware": ["auth:sanctum", "superadmin"],
+        "body": { "name": "string|optional", "email": "email|optional", "role": "string|optional", "status": "string|optional" },
+        "responses": {
+          "200": { "data": { "message": "string", "data": "UserObject" } }
+        }
+      },
+
+      "users_block": {
+        "method": "POST",
+        "path": "/admin/users/{id}/block",
+        "auth": true,
+        "middleware": ["auth:sanctum", "superadmin"],
+        "responses": { "200": { "data": { "message": "string" } } }
+      },
+
+      "users_unblock": {
+        "method": "POST",
+        "path": "/admin/users/{id}/unblock",
+        "auth": true,
+        "middleware": ["auth:sanctum", "superadmin"],
+        "responses": { "200": { "data": { "message": "string" } } }
+      },
+
+      "users_impersonate": {
+        "method": "POST",
+        "path": "/admin/users/{id}/impersonate",
+        "auth": true,
+        "middleware": ["auth:sanctum", "superadmin"],
+        "responses": {
+          "200": { "data": { "token": "string", "target_user": "UserObject", "expires_at": "ISO8601" } }
+        }
+      },
+
+      "users_end_impersonate": {
+        "method": "DELETE",
+        "path": "/admin/impersonate",
+        "auth": true,
+        "middleware": ["auth:sanctum", "superadmin"],
+        "responses": { "200": { "data": { "message": "string" } } }
+      },
+
+      "users_verify_email": {
+        "method": "POST",
+        "path": "/admin/users/{id}/verify-email",
+        "auth": true,
+        "middleware": ["auth:sanctum", "superadmin"],
+        "responses": { "200": { "data": { "message": "string" } } }
+      },
+
+      "users_disable_2fa": {
+        "method": "POST",
+        "path": "/admin/users/{id}/disable-2fa",
+        "auth": true,
+        "middleware": ["auth:sanctum", "superadmin"],
+        "responses": { "200": { "data": { "message": "string" } } }
+      },
+
+      "users_toggle_admin": {
+        "method": "POST",
+        "path": "/admin/users/{id}/toggle-admin",
+        "auth": true,
+        "middleware": ["auth:sanctum", "superadmin"],
+        "responses": { "200": { "data": { "message": "string", "role": "string" } } }
+      },
+
+      "users_delete": {
+        "method": "DELETE",
+        "path": "/admin/users/{id}",
+        "auth": true,
+        "middleware": ["auth:sanctum", "superadmin"],
+        "responses": { "200": { "data": { "message": "string" } } }
+      },
+
+      "users_assign_subscription": {
+        "method": "POST",
+        "path": "/admin/users/{id}/subscriptions",
+        "auth": true,
+        "middleware": ["auth:sanctum", "superadmin"],
+        "body": { "plan_id": "integer|required", "payment_method_id": "integer|optional", "notes": "string|optional" },
+        "responses": {
+          "201": { "data": { "message": "string", "data": "SubscriptionObject" } }
+        }
+      },
+
+      "plans_list": {
+        "method": "GET",
+        "path": "/admin/plans",
+        "auth": true,
+        "middleware": ["auth:sanctum", "superadmin"],
+        "responses": { "200": { "data": ["PlanObject"] } }
+      },
+
+      "plans_create": {
+        "method": "POST",
+        "path": "/admin/plans",
+        "auth": true,
+        "middleware": ["auth:sanctum", "superadmin"],
+        "body": { "name": "string|required", "price": "decimal|required", "limits": "object|required", "features": "object|optional", "is_public": "boolean|optional" },
+        "responses": { "201": { "data": "PlanObject" } }
+      },
+
+      "plans_show": {
+        "method": "GET",
+        "path": "/admin/plans/{id}",
+        "auth": true,
+        "middleware": ["auth:sanctum", "superadmin"],
+        "responses": { "200": { "data": "PlanObject" }, "404": { "message": "string" } }
+      },
+
+      "plans_update": {
+        "method": "PUT",
+        "path": "/admin/plans/{id}",
+        "auth": true,
+        "middleware": ["auth:sanctum", "superadmin"],
+        "body": { "any_plan_field": "optional" },
+        "responses": { "200": { "data": "PlanObject" } }
+      },
+
+      "plans_delete": {
+        "method": "DELETE",
+        "path": "/admin/plans/{id}",
+        "auth": true,
+        "middleware": ["auth:sanctum", "superadmin"],
+        "responses": { "200": { "data": { "message": "string" } } }
+      },
+
+      "plans_toggle_visibility": {
+        "method": "PATCH",
+        "path": "/admin/plans/{id}/toggle-visibility",
+        "auth": true,
+        "middleware": ["auth:sanctum", "superadmin"],
+        "responses": { "200": { "data": { "message": "string", "is_public": "boolean" } } }
+      },
+
+      "payment_methods_list": {
+        "method": "GET",
+        "path": "/admin/payment-methods",
+        "auth": true,
+        "middleware": ["auth:sanctum", "superadmin"],
+        "responses": { "200": { "data": ["PaymentMethodObject"] } }
+      },
+
+      "payment_methods_create": {
+        "method": "POST",
+        "path": "/admin/payment-methods",
+        "auth": true,
+        "middleware": ["auth:sanctum", "superadmin"],
+        "body": { "name": "string|required", "name_ar": "string|optional", "type": "string|required", "config": "object|optional", "is_active": "boolean|optional" },
+        "responses": { "201": { "data": "PaymentMethodObject" } }
+      },
+
+      "payment_methods_update": {
+        "method": "PUT",
+        "path": "/admin/payment-methods/{id}",
+        "auth": true,
+        "middleware": ["auth:sanctum", "superadmin"],
+        "body": { "any_field": "optional" },
+        "responses": { "200": { "data": "PaymentMethodObject" } }
+      },
+
+      "payment_methods_delete": {
+        "method": "DELETE",
+        "path": "/admin/payment-methods/{id}",
+        "auth": true,
+        "middleware": ["auth:sanctum", "superadmin"],
+        "responses": { "200": { "data": { "message": "string" } } }
+      },
+
+      "subscriptions_list": {
+        "method": "GET",
+        "path": "/admin/subscriptions",
+        "auth": true,
+        "middleware": ["auth:sanctum", "superadmin"],
+        "query": { "status": "string|optional", "plan": "string|optional", "search": "string|optional" },
+        "responses": { "200": { "data": ["SubscriptionObject"], "meta": "PaginationMeta" } }
+      },
+
+      "subscriptions_show": {
+        "method": "GET",
+        "path": "/admin/subscriptions/{id}",
+        "auth": true,
+        "middleware": ["auth:sanctum", "superadmin"],
+        "responses": { "200": { "data": "SubscriptionObject" }, "404": { "message": "string" } }
+      },
+
+      "subscriptions_upgrade": {
+        "method": "POST",
+        "path": "/admin/subscriptions/{id}/upgrade",
+        "auth": true,
+        "middleware": ["auth:sanctum", "superadmin"],
+        "body": { "plan_id": "integer|required" },
+        "responses": { "200": { "data": { "message": "string", "data": "SubscriptionObject" } } }
+      },
+
+      "subscriptions_cancel": {
+        "method": "POST",
+        "path": "/admin/subscriptions/{id}/cancel",
+        "auth": true,
+        "middleware": ["auth:sanctum", "superadmin"],
+        "responses": { "200": { "data": { "message": "string" } } }
+      },
+
+      "subscriptions_pause": {
+        "method": "POST",
+        "path": "/admin/subscriptions/{id}/pause",
+        "auth": true,
+        "middleware": ["auth:sanctum", "superadmin"],
+        "responses": { "200": { "data": { "message": "string" } } }
+      },
+
+      "subscriptions_resume": {
+        "method": "POST",
+        "path": "/admin/subscriptions/{id}/resume",
+        "auth": true,
+        "middleware": ["auth:sanctum", "superadmin"],
+        "responses": { "200": { "data": { "message": "string" } } }
+      },
+
+      "payments_list": {
+        "method": "GET",
+        "path": "/admin/payments",
+        "auth": true,
+        "middleware": ["auth:sanctum", "superadmin"],
+        "query": { "status": "string|optional", "method": "string|optional", "from": "date|optional", "to": "date|optional" },
+        "responses": { "200": { "data": ["PaymentObject"], "meta": "PaginationMeta" } }
+      },
+
+      "payments_show": {
+        "method": "GET",
+        "path": "/admin/payments/{id}",
+        "auth": true,
+        "middleware": ["auth:sanctum", "superadmin"],
+        "responses": { "200": { "data": "PaymentObject" }, "404": { "message": "string" } }
+      },
+
+      "payments_refund": {
+        "method": "POST",
+        "path": "/admin/payments/{id}/refund",
+        "auth": true,
+        "middleware": ["auth:sanctum", "superadmin"],
+        "responses": {
+          "200": { "data": { "message": "string" } },
+          "422": { "message": "string" }
+        }
+      },
+
+      "domains_list": {
+        "method": "GET",
+        "path": "/admin/domains",
+        "auth": true,
+        "middleware": ["auth:sanctum", "superadmin"],
+        "query": { "search": "string|optional" },
+        "responses": { "200": { "data": ["DomainResource"], "meta": "PaginationMeta" } }
+      },
+
+      "domains_delete": {
+        "method": "DELETE",
+        "path": "/admin/domains/{id}",
+        "auth": true,
+        "middleware": ["auth:sanctum", "superadmin"],
+        "responses": { "200": { "data": { "message": "string" } } }
+      },
+
+      "theme_show": {
+        "method": "GET",
+        "path": "/admin/theme",
+        "auth": true,
+        "middleware": ["auth:sanctum", "superadmin"],
+        "responses": { "200": { "data": [{ "key": "string", "value": "string" }] } }
+      },
+
+      "theme_update": {
+        "method": "PUT",
+        "path": "/admin/theme",
+        "auth": true,
+        "middleware": ["auth:sanctum", "superadmin"],
+        "body": { "settings": [{ "key": "string", "value": "string" }] },
+        "responses": { "200": { "data": { "message": "string" } } }
+      },
+
+      "theme_upload_logo": {
+        "method": "POST",
+        "path": "/admin/theme/logo",
+        "auth": true,
+        "middleware": ["auth:sanctum", "superadmin"],
+        "body": { "logo": "file (multipart/form-data)", "type": "string (logo type)" },
+        "responses": { "200": { "data": { "url": "string" } } }
+      },
+
+      "audit_log": {
+        "method": "GET",
+        "path": "/admin/audit-log",
+        "auth": true,
+        "middleware": ["auth:sanctum", "superadmin"],
+        "query": { "admin_id": "integer|optional", "action": "string|optional", "from": "date|optional", "to": "date|optional" },
+        "responses": { "200": { "data": ["AuditLogObject"], "meta": "PaginationMeta" } }
+      }
+    }
+  },
+
+  "shared_types": {
+
+    "UserObject": {
+      "id": "integer",
+      "name": "string",
+      "email": "string",
+      "role": "string (user | admin)",
+      "locale": "string (en | ar)",
+      "timezone": "string",
+      "appearance": "string (light | dark | system)",
+      "email_verified_at": "ISO8601 | null",
+      "two_factor_enabled": "boolean",
+      "created_at": "ISO8601",
+      "updated_at": "ISO8601"
+    },
+
+    "DomainResource": {
+      "id": "integer",
+      "domain": "string",
+      "active": "boolean",
+      "script_verified": "boolean",
+      "token_in_grace_period": "boolean",
+      "script_token": "string",
+      "settings": "object",
+      "created_at": "ISO8601",
+      "updated_at": "ISO8601",
+      "exclusions": [{ "id": "integer", "type": "ip | cookie | user_agent", "value": "string" }]
+    },
+
+    "PlanObject": {
+      "id": "integer",
+      "name": "string",
+      "price": "decimal",
+      "limits": { "domains": "integer", "pageviews_per_month": "integer" },
+      "features": "object",
+      "is_public": "boolean"
+    },
+
+    "SubscriptionObject": {
+      "id": "integer",
+      "plan": "PlanObject",
+      "status": "active | cancelled | trialing | paused",
+      "ends_at": "ISO8601 | null",
+      "current_period_end": "ISO8601 | null"
+    },
+
+    "PaymentObject": {
+      "id": "integer",
+      "amount": "decimal",
+      "currency": "string",
+      "status": "string",
+      "method": "string",
+      "created_at": "ISO8601"
+    },
+
+    "WebhookObject": {
+      "id": "integer",
+      "url": "string",
+      "events": ["string"],
+      "is_active": "boolean",
+      "created_at": "ISO8601"
+    },
+
+    "AlertRuleObject": {
+      "id": "integer",
+      "metric": "string",
+      "condition": "string",
+      "threshold": "number",
+      "channel": "string",
+      "is_active": "boolean"
+    },
+
+    "PaginationMeta": {
+      "total": "integer",
+      "per_page": "integer",
+      "current_page": "integer",
+      "last_page": "integer"
+    },
+
+    "AiSuggestionObject": {
+      "id": "integer",
+      "title": "string",
+      "description": "string",
+      "priority": "string",
+      "dismissed_at": "ISO8601 | null"
+    },
+
+    "ExportJobObject": {
+      "id": "integer",
+      "type": "string",
+      "format": "string",
+      "status": "pending | processing | ready | failed",
+      "download_url": "string | null",
+      "created_at": "ISO8601"
+    },
+
+    "SharedReportObject": {
+      "id": "integer",
+      "label": "string",
+      "token": "string",
+      "public_url": "string",
+      "allowed_pages": ["string"],
+      "expires_at": "ISO8601 | null",
+      "created_at": "ISO8601"
+    }
+  }
+}
