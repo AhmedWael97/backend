@@ -32,7 +32,7 @@ class VisitorController extends Controller
         $where = ['domain_id = ' . (int) $domain->id];
 
         if ($device && $device !== 'all') {
-            $where[] = "device_type = '" . addslashes($device) . "'";
+            $where[] = "device = '" . addslashes($device) . "'";
         }
         if ($search) {
             $where[] = "visitor_id LIKE '%" . addslashes($search) . "%'";
@@ -56,9 +56,9 @@ class VisitorController extends Controller
                  visitor_id,
                  max(started_at)  AS last_seen,
                  count()          AS session_count,
-                 any(device_type) AS device_type,
-                 any(country)     AS country,
-                 any(browser)     AS browser
+                 any(device)   AS device_type,
+                 if(any(country) = '', 'Unknown', any(country)) AS country,
+                 any(browser)  AS browser
              FROM sessions
              {$whereClause}
              GROUP BY visitor_id
@@ -100,12 +100,12 @@ class VisitorController extends Controller
         );
 
         $pageviews = $this->ch->select(
-            "SELECT url, title, toUnixTimestamp(timestamp) AS ts
+            "SELECT url, title, toUnixTimestamp(ts) AS ts
              FROM events
              WHERE domain_id = {$domainId}
                AND visitor_id = '{$safeVisitor}'
-               AND event_type = 'pageview'
-             ORDER BY timestamp DESC
+               AND type = 'pageview'
+             ORDER BY ts DESC
              LIMIT 50"
         );
 

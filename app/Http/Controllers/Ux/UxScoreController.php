@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Ux;
 
 use App\Http\Controllers\Controller;
+use App\Jobs\ComputeUxScoreJob;
 use App\Models\Domain;
 use App\Models\UxScore;
 use App\Services\ClickHouseService;
@@ -16,6 +17,12 @@ class UxScoreController extends Controller
         $domain = Domain::where('id', $domainId)
             ->where('user_id', $request->user()->id)
             ->firstOrFail();
+
+        // Ensure UX score is available and reasonably fresh for dashboard reads.
+        $latest = UxScore::where('domain_id', $domain->id)->latest('calculated_at')->first();
+        if (!$latest || $latest->calculated_at?->lt(now()->subMinutes(15))) {
+            ComputeUxScoreJob::dispatchSync($domain->id);
+        }
 
         $score = UxScore::where('domain_id', $domain->id)
             ->latest('calculated_at')

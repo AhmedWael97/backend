@@ -59,13 +59,12 @@ class RegisterController extends Controller
             ]);
         }
 
-        event(new Registered($user));
-
+        // Only dispatch verification flow when explicitly enabled.
+        // This avoids SMTP/network latency (and 504s) when verification is paused.
         if (!config('app.email_verification_enabled', false)) {
-            // Email verification disabled — auto-verify immediately
             $user->markEmailAsVerified();
         } else {
-            $user->sendEmailVerificationNotification();
+            event(new Registered($user));
         }
 
         $token = $user->createToken('api')->plainTextToken;

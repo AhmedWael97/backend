@@ -11,6 +11,16 @@ use Illuminate\Support\Facades\Storage;
 
 class ExportController extends Controller
 {
+    public function index(Request $request): JsonResponse
+    {
+        $exports = ExportJob::where('user_id', $request->user()->id)
+            ->when($request->integer('domain_id'), fn($q, $id) => $q->where('domain_id', $id))
+            ->latest()
+            ->get();
+
+        return $this->success($exports);
+    }
+
     public function store(Request $request): JsonResponse
     {
         $data = $request->validate([

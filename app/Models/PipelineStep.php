@@ -7,7 +7,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class PipelineStep extends Model
 {
-    protected $fillable = ['pipeline_id', 'name', 'url_pattern', 'order'];
+    protected $fillable = ['pipeline_id', 'name', 'url_pattern', 'match_type', 'order'];
 
     public function pipeline(): BelongsTo
     {

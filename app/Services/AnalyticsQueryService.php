@@ -41,11 +41,11 @@ class AnalyticsQueryService
             'avg_duration' => 0,
         ];
 
-        // Bounce rate from sessions table
+        // Bounce rate from sessions table (page_count = 1 means single-page session = bounce)
         $bounceRows = $this->clickhouse->select("
             SELECT
-                countIf(bounced = 1) AS bounced,
-                count()               AS total
+                countIf(page_count = 1) AS bounced,
+                count()                  AS total
             FROM sessions
             WHERE domain_id = {$domainId}
               AND started_at >= '{$startStr}'
@@ -214,19 +214,24 @@ class AnalyticsQueryService
             WHERE domain_id = {$domainId}
               AND ts >= '{$startStr}'
               AND ts < '{$endStr}'
-              AND country != ''
         ";
 
         $countries = $this->clickhouse->select("
-            SELECT country, count() AS pageviews, uniq(visitor_id) AS unique_visitors
+            SELECT
+                if(country = '', 'Unknown', country) AS country,
+                count() AS pageviews,
+                uniq(visitor_id) AS unique_visitors
             {$base}
             GROUP BY country ORDER BY pageviews DESC LIMIT 50
         ");
 
         $regions = $this->clickhouse->select("
-            SELECT region, country, count() AS pageviews, uniq(visitor_id) AS unique_visitors
+            SELECT
+                if(region = '', 'Unknown', region) AS region,
+                if(country = '', 'Unknown', country) AS country,
+                count() AS pageviews,
+                uniq(visitor_id) AS unique_visitors
             {$base}
-              AND region != ''
             GROUP BY region, country ORDER BY pageviews DESC LIMIT 50
         ");
 
@@ -276,20 +281,43 @@ class AnalyticsQueryService
     {
         $startStr = $start->format('Y-m-d H:i:s');
         $endStr = $end->format('Y-m-d H:i:s');
+        $columnRows = $this->clickhouse->select("
+            SELECT name
+            FROM system.columns
+            WHERE database = currentDatabase()
+              AND table = 'pipeline_events'
+        ");
+        $columns = [];
+        foreach ($columnRows as $row) {
+            $name = (string) ($row['name'] ?? '');
+            if ($name !== '') {
+                $columns[$name] = true;
+            }
+        }
+        $hasStepOrder = isset($columns['step_order']);
+        $hasVisitorId = isset($columns['visitor_id']);
+        $timeColumn = isset($columns['ts']) ? 'ts' : (isset($columns['event_time']) ? 'event_time' : null);
+        if ($timeColumn === null) {
+            return [];
+        }
+        $selectStepOrder = $hasStepOrder ? 'step_order' : 'toUInt32(0) AS step_order';
+        $visitorExpr = $hasVisitorId ? 'uniq(visitor_id)' : 'uniq(session_id)';
+        $groupBy = $hasStepOrder ? 'step_order, step_id' : 'step_id';
+        $orderBy = $hasStepOrder ? 'step_order ASC' : 'sessions DESC';
 
         $rows = $this->clickhouse->select("
             SELECT
-                step_order,
+                {$selectStepOrder},
                 step_id,
                 uniq(session_id) AS sessions,
-                uniq(visitor_id) AS visitors
+                {$visitorExpr} AS visitors
             FROM pipeline_events
             WHERE domain_id = {$domainId}
               AND pipeline_id = {$pipelineId}
-              AND ts >= '{$startStr}'
-              AND ts < '{$endStr}'
-            GROUP BY step_order, step_id
-            ORDER BY step_order ASC
+              AND {$timeColumn} >= '{$startStr}'
+              AND {$timeColumn} < '{$endStr}'
+            GROUP BY {$groupBy}
+            ORDER BY {$orderBy}
         ");
 
         // Compute drop-off and conversion rates

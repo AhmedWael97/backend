@@ -44,7 +44,7 @@ class UxIssuesController extends Controller
         $rows = $this->clickhouse->select("
             SELECT
                 type,
-                url,
+                replaceRegexpOne(url, '^(https?://)www\\.', '\\\\1') AS url,
                 element_selector,
                 details,
                 count() AS occurrences,

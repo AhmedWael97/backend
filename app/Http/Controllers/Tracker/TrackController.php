@@ -74,7 +74,7 @@ class TrackController extends Controller
             return response('', 401, $corsHeaders);
         }
 
-        $ip = $request->ip();
+        $ip = $this->resolveClientIp($request);
         $ua = substr((string) $request->userAgent(), 0, 500);
 
         // --- Bot detection: reject headless/automation UAs silently ---
@@ -105,22 +105,27 @@ class TrackController extends Controller
             cache()->put("script_verified:{$domain->script_token}", true, 600);
         }
 
-        $ts = now()->toIso8601String();
+        $ts = now()->format('Y-m-d H:i:s');
 
         // Increment quota counter (TTL 25h to cover timezone drift)
         Redis::incr($quotaKey);
         Redis::expire($quotaKey, 90000);
 
         foreach ($events as $event) {
+            $rawEvent = $this->sanitizeString($event['e'] ?? null, 64);
+            $normalizedType = $this->sanitizeEventType($rawEvent ?? 'pageview');
+
             $payload = [
                 'domain_id' => $domain->id,
                 'session_id' => $this->sanitizeSessionId($event['sid'] ?? null),
                 'visitor_id' => $visitorId,
-                'type' => $this->sanitizeEventType($event['e'] ?? 'pageview'),
+                'type' => $normalizedType,
+                // Preserve original event name for custom events emitted as e=<name>.
+                'custom_name' => $normalizedType === 'custom' ? $rawEvent : null,
                 'url' => $this->sanitizeUrl($event['u'] ?? null),
                 'referrer' => $this->sanitizeUrl($event['r'] ?? null),
                 'title' => $this->sanitizeString($event['pt'] ?? null, 255),
-                'props' => $this->sanitizeProps($event['p'] ?? null),
+                'props' => $this->extractProps($event),
                 'screen_w' => (int) ($event['sw'] ?? 0),
                 'screen_h' => (int) ($event['sh'] ?? 0),
                 'duration' => (int) ($event['d'] ?? 0),
@@ -185,7 +190,22 @@ class TrackController extends Controller
 
     private function sanitizeEventType(mixed $value): string
     {
-        $allowed = ['pageview', 'custom', 'pageleave', 'click', 'scroll', 'form_submit', 'identify'];
+        $allowed = [
+            'pageview',
+            'custom',
+            'pageleave',
+            'click',
+            'scroll',
+            'form_submit',
+            'identify',
+            'js_error',
+            'rage_click',
+            'dead_click',
+            'form_abandon',
+            'broken_link',
+            'scroll_depth',
+            'time_on_page',
+        ];
         $str = strtolower(trim((string) ($value ?? 'pageview')));
         return in_array($str, $allowed, true) ? $str : 'custom';
     }
@@ -219,5 +239,101 @@ class TrackController extends Controller
             $sanitized[$key] = is_scalar($v) ? substr((string) $v, 0, 100) : null;
         }
         return $sanitized;
+    }
+
+    private function extractProps(array $event): array
+    {
+        $props = $this->sanitizeProps($event['p'] ?? null);
+
+        // Tracker snippet emits event-specific fields at top-level (el/x/y/tg/...)
+        // for compactness. Merge those keys so UX signals keep full context.
+        $reserved = [
+            't' => true,
+            'token' => true,
+            'e' => true,
+            'u' => true,
+            'r' => true,
+            'pt' => true,
+            'sw' => true,
+            'sh' => true,
+            'vid' => true,
+            'sid' => true,
+            'd' => true,
+            'p' => true,
+        ];
+
+        foreach ($event as $k => $v) {
+            $key = (string) $k;
+            if (isset($reserved[$key])) {
+                continue;
+            }
+            if (is_array($v) || is_object($v)) {
+                continue;
+            }
+            $cleanKey = substr(preg_replace('/[^a-zA-Z0-9_]/', '', $key), 0, 100);
+            if ($cleanKey === '') {
+                continue;
+            }
+            if (!array_key_exists($cleanKey, $props)) {
+                $props[$cleanKey] = substr((string) $v, 0, 100);
+            }
+            if (count($props) >= 20) {
+                break;
+            }
+        }
+
+        return $props;
+    }
+
+    /**
+     * Resolve the best client IP when running behind reverse proxies/CDNs.
+     */
+    private function resolveClientIp(Request $request): string
+    {
+        $candidates = [];
+
+        // Cloudflare real client IP
+        $cfIp = trim((string) $request->header('CF-Connecting-IP', ''));
+        if ($cfIp !== '') {
+            $candidates[] = $cfIp;
+        }
+
+        // Standard proxy chain, first IP is original client
+        $xff = (string) $request->header('X-Forwarded-For', '');
+        if ($xff !== '') {
+            foreach (explode(',', $xff) as $part) {
+                $ip = trim($part);
+                if ($ip !== '') {
+                    $candidates[] = $ip;
+                }
+            }
+        }
+
+        $xri = trim((string) $request->header('X-Real-IP', ''));
+        if ($xri !== '') {
+            $candidates[] = $xri;
+        }
+
+        // Last fallback from Laravel/symfony resolver
+        $fallback = (string) $request->ip();
+        if ($fallback !== '') {
+            $candidates[] = $fallback;
+        }
+
+        // Prefer a public routable IP for GeoIP lookup
+        foreach ($candidates as $ip) {
+            if (filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE)) {
+                return $ip;
+            }
+        }
+
+        // Otherwise return any valid IP we found
+        foreach ($candidates as $ip) {
+            if (filter_var($ip, FILTER_VALIDATE_IP)) {
+                return $ip;
+            }
+        }
+
+        return '127.0.0.1';
     }
 }

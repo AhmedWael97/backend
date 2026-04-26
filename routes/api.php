@@ -9,6 +9,7 @@ use App\Http\Controllers\Auth\RegisterController;
 use App\Http\Controllers\Auth\TwoFactorController;
 use App\Http\Controllers\Analytics\CompanyController;
 use App\Http\Controllers\Analytics\CustomEventsController;
+use App\Http\Controllers\Analytics\CustomEventsStoreController;
 use App\Http\Controllers\Analytics\DevicesController;
 use App\Http\Controllers\Analytics\GeoController;
 use App\Http\Controllers\Analytics\IdentityController;
@@ -30,6 +31,8 @@ use App\Http\Controllers\Ux\UxScoreController;
 use App\Http\Controllers\Ux\UxIssuesController;
 use App\Http\Controllers\Ux\UxHeatmapController;
 use App\Http\Controllers\Ux\UxErrorsController;
+use App\Http\Controllers\Ux\UxScrollDepthController;
+use App\Http\Controllers\Ux\UxWebVitalsController;
 use App\Http\Controllers\Ai\AiController;
 use App\Http\Controllers\Admin\AdminAuditLogController;
 use App\Http\Controllers\Admin\AdminDomainController;
@@ -195,6 +198,7 @@ Route::prefix('v1')->middleware('api.key')->group(function () {
 
         // Exports
         Route::prefix('exports')->name('exports.')->group(function () {
+            Route::get('/', [ExportController::class, 'index'])->name('index');
             Route::post('/', [ExportController::class, 'store'])->name('store');
             Route::get('{id}', [ExportController::class, 'show'])->name('show');
             Route::get('{id}/download', [ExportController::class, 'download'])->name('download');
@@ -247,6 +251,7 @@ Route::prefix('v1')->middleware('api.key')->group(function () {
                 Route::get('devices', DevicesController::class)->name('devices');
                 Route::get('geo', GeoController::class)->name('geo');
                 Route::get('custom-events', CustomEventsController::class)->name('custom-events');
+                Route::post('custom-events/store', CustomEventsStoreController::class)->name('custom-events.store');
                 Route::get('pipelines/{pipeline}/funnel', PipelineController::class)->name('pipelines.funnel');
                 Route::get('realtime', RealtimeController::class)->name('realtime');
             });
@@ -335,6 +340,8 @@ Route::prefix('v1')->middleware('api.key')->group(function () {
             Route::get('issues', UxIssuesController::class)->name('issues');
             Route::get('heatmap', UxHeatmapController::class)->name('heatmap');
             Route::get('errors', UxErrorsController::class)->name('errors');
+            Route::get('scroll-depth', UxScrollDepthController::class)->name('scroll-depth');
+            Route::get('web-vitals', UxWebVitalsController::class)->name('web-vitals');
         });
 
         /*

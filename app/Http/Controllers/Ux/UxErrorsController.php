@@ -24,20 +24,22 @@ class UxErrorsController extends Controller
         $to = $request->query('to', now()->format('Y-m-d'));
 
         $rows = $this->clickhouse->select("
-            SELECT
-                JSONExtractString(details, 'message') AS message,
-                JSONExtractString(details, 'file')    AS file,
-                count()                               AS occurrences,
-                uniq(visitor_id)                      AS affected_visitors,
-                max(created_at)                       AS last_seen
-            FROM ux_events
-            WHERE domain_id = {$domain->id}
-              AND type = 'js_error'
-              AND created_at >= '{$from} 00:00:00'
-              AND created_at <= '{$to} 23:59:59'
-            GROUP BY message, file
-            ORDER BY occurrences DESC
-            LIMIT 100
+                        SELECT
+                                JSONExtractString(details, 'msg') AS message,
+                                JSONExtractString(details, 'src') AS file,
+                                JSONExtractInt(details, 'ln')     AS line,
+                                any(JSONExtractString(details, 'stk')) AS stack,
+                                count()                               AS occurrences,
+                                uniq(visitor_id)                      AS affected_visitors,
+                                max(created_at)                       AS last_seen
+                        FROM ux_events
+                        WHERE domain_id = {$domain->id}
+                            AND type = 'js_error'
+                            AND created_at >= '{$from} 00:00:00'
+                            AND created_at <= '{$to} 23:59:59'
+                        GROUP BY message, file, line
+                        ORDER BY occurrences DESC
+                        LIMIT 200
         ");
 
         return $this->success($rows);

@@ -4,6 +4,7 @@ namespace App\Jobs;
 
 use App\Events\RealtimeVisitorUpdate;
 use App\Models\Domain;
+use App\Models\Pipeline;
 use App\Models\User;
 use App\Models\VisitorIdentity;
 use App\Models\Webhook;
@@ -70,6 +71,9 @@ class ProcessTrackingEvent implements ShouldQueue
 
         $clickhouse->insertJson('events', [$row]);
 
+        // Persist UX-specific signals for UX Intelligence dashboards.
+        $this->writeUxEvent($clickhouse, $row, $p);
+
         // Write session record for pageview (entry event)
         if ($row['type'] === 'pageview') {
             // Company enrichment — check Redis cache first
@@ -107,14 +111,23 @@ class ProcessTrackingEvent implements ShouldQueue
             ]);
         }
 
-        // Also write to custom_events for fast custom event queries
-        if ($row['type'] === 'custom' && !empty($p['props']['e'])) {
+        // Match pageview URL against pipeline steps and write to pipeline_events
+        if ($row['type'] === 'pageview' && !empty($row['url'])) {
+            $this->matchPipelineSteps($clickhouse, $row);
+        }
+
+        // Also write to custom_events for fast custom event queries.
+        // Accept both formats:
+        // 1) props.e = custom event name
+        // 2) custom_name preserved by TrackController from raw event key e=<name>
+        $customEventName = trim((string) (($p['props']['e'] ?? null) ?: ($p['custom_name'] ?? '')));
+        if ($row['type'] === 'custom' && $customEventName !== '' && strtolower($customEventName) !== 'custom') {
             $clickhouse->insertJson('custom_events', [
                 [
                     'domain_id' => $row['domain_id'],
                     'session_id' => $row['session_id'],
                     'visitor_id' => $row['visitor_id'],
-                    'name' => $p['props']['e'],
+                    'name' => substr($customEventName, 0, 64),
                     'props' => $p['props'],
                     'url' => $row['url'],
                     'ts' => $row['ts'],
@@ -191,6 +204,60 @@ class ProcessTrackingEvent implements ShouldQueue
         broadcast(new RealtimeVisitorUpdate($row['domain_id'], $active));
     }
 
+    private function matchPipelineSteps(ClickHouseService $clickhouse, array $row): void
+    {
+        $cacheKey = "eye:pipelines:{$row['domain_id']}";
+        $cached = Redis::get($cacheKey);
+
+        if ($cached !== null) {
+            $pipelines = json_decode($cached, true);
+        } else {
+            $pipelines = Pipeline::where('domain_id', $row['domain_id'])
+                ->with('steps')
+                ->get()
+                ->toArray();
+            Redis::setex($cacheKey, 60, json_encode($pipelines));
+        }
+
+        if (empty($pipelines)) {
+            return;
+        }
+
+        $urlPath = parse_url($row['url'], PHP_URL_PATH) ?? $row['url'];
+        $pipelineRows = [];
+
+        foreach ($pipelines as $pipeline) {
+            foreach ($pipeline['steps'] as $step) {
+                $pattern = $step['url_pattern'];
+                $matchType = $step['match_type'] ?? 'contains';
+
+                $matched = match ($matchType) {
+                    'equals' => $urlPath === $pattern || $row['url'] === $pattern,
+                    'starts_with' => str_starts_with($urlPath, $pattern) || str_starts_with($row['url'], $pattern),
+                    'regex' => @preg_match($pattern, $urlPath) === 1,
+                    default => str_contains($urlPath, $pattern) || str_contains($row['url'], $pattern),
+                };
+
+                if ($matched) {
+                    $pipelineRows[] = [
+                        'domain_id' => $row['domain_id'],
+                        'pipeline_id' => (int) $pipeline['id'],
+                        'step_id' => (int) $step['id'],
+                        'step_order' => (int) $step['order'],
+                        'session_id' => $row['session_id'],
+                        'visitor_id' => $row['visitor_id'],
+                        'url' => $row['url'],
+                        'ts' => $row['ts'],
+                    ];
+                }
+            }
+        }
+
+        if (!empty($pipelineRows)) {
+            $clickhouse->insertJson('pipeline_events', $pipelineRows);
+        }
+    }
+
     private function parseOs(string $ua): string
     {
         if (str_contains($ua, 'Windows'))
@@ -242,5 +309,49 @@ class ProcessTrackingEvent implements ShouldQueue
         if ($screenW > 0 && $screenW < 768)
             return 'mobile';
         return 'desktop';
+    }
+
+    private function writeUxEvent(ClickHouseService $clickhouse, array $row, array $payload): void
+    {
+        $type = (string) ($row['type'] ?? '');
+        $props = is_array($payload['props'] ?? null) ? $payload['props'] : [];
+
+        $uxTypes = [
+            'js_error',
+            'rage_click',
+            'dead_click',
+            'click',
+            'form_abandon',
+            'broken_link',
+            'scroll_depth',
+            'time_on_page',
+        ];
+
+        $isWebVitals = $type === 'custom' && (($payload['custom_name'] ?? null) === 'web_vitals');
+        if (!in_array($type, $uxTypes, true) && !$isWebVitals) {
+            return;
+        }
+
+        $uxType = $isWebVitals ? 'web_vitals' : $type;
+        $selector = substr((string) ($props['el'] ?? $props['form'] ?? ''), 0, 255);
+
+        // Store payload details as JSON string for grouping and later inspection.
+        $details = json_encode($props, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+        if ($details === false) {
+            $details = '{}';
+        }
+
+        $clickhouse->insertJson('ux_events', [
+            [
+                'domain_id' => $row['domain_id'],
+                'session_id' => $row['session_id'],
+                'visitor_id' => $row['visitor_id'],
+                'type' => $uxType,
+                'url' => (string) ($row['url'] ?? ''),
+                'element_selector' => $selector,
+                'details' => $details,
+                'created_at' => $row['ts'],
+            ]
+        ]);
     }
 }
