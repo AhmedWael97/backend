@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Auth;
 use App\Http\Controllers\Controller;
 use Illuminate\Auth\Events\Verified;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 
 class EmailVerificationController extends Controller
@@ -27,22 +28,27 @@ class EmailVerificationController extends Controller
 
     /**
      * Mark the authenticated user's email address as verified.
+     * Redirects to the frontend after verification so the user
+     * lands on a proper page instead of seeing raw JSON.
      */
-    public function verify(Request $request, int $id, string $hash): JsonResponse
+    public function verify(Request $request, int $id, string $hash): RedirectResponse
     {
+        $frontendUrl = rtrim(config('app.frontend_url', 'http://localhost:3000'), '/');
+        $locale = $request->query('locale', 'en');
+
         $user = \App\Models\User::findOrFail($id);
 
         if (!hash_equals(sha1($user->getEmailForVerification()), $hash)) {
-            return $this->error('Invalid verification link.', 403);
+            return redirect("{$frontendUrl}/{$locale}/auth/verify-email?error=invalid");
         }
 
         if ($user->hasVerifiedEmail()) {
-            return $this->success(['message' => 'Email already verified.']);
+            return redirect("{$frontendUrl}/{$locale}/settings/domains?welcome=1&verified=already");
         }
 
         $user->markEmailAsVerified();
         event(new Verified($user));
 
-        return $this->success(['message' => 'Email verified successfully.']);
+        return redirect("{$frontendUrl}/{$locale}/settings/domains?welcome=1&verified=1");
     }
 }

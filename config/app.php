@@ -43,6 +43,8 @@ return [
 
     'email_verification_enabled' => (bool) env('EMAIL_VERIFICATION_ENABLED', false),
 
+    'frontend_url' => env('FRONTEND_URL', 'http://localhost:3000'),
+
     /*
     |--------------------------------------------------------------------------
     | App-level API Keys
