@@ -30,10 +30,10 @@ class DomainController extends Controller
         $user = $request->user();
 
         // Enforce domain limit for the user's active plan
-        // $limit = optional($user->subscription?->plan)->getLimit('domains', 1);
-        // if ($limit !== -1 && $user->domains()->count() >= $limit) {
-        //     return $this->error("Your plan allows up to {$limit} domain(s). Please upgrade to add more.", 422);
-        // }
+        $limit = optional($user->subscription?->plan)->getLimit('domains', 1);
+        if ($limit !== null && $limit !== -1 && $user->domains()->count() >= $limit) {
+            return $this->error("Your plan allows up to {$limit} domain(s). Please upgrade to add more.", 422);
+        }
 
         if ($user->domains()->where('domain', $request->domain)->exists()) {
             return $this->error('This domain is already registered.', 422);
