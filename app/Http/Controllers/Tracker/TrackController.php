@@ -205,6 +205,8 @@ class TrackController extends Controller
             'broken_link',
             'scroll_depth',
             'time_on_page',
+            'excessive_scroll',
+            'quick_back',
         ];
         $str = strtolower(trim((string) ($value ?? 'pageview')));
         return in_array($str, $allowed, true) ? $str : 'custom';

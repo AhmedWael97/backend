@@ -325,6 +325,8 @@ class ProcessTrackingEvent implements ShouldQueue
             'broken_link',
             'scroll_depth',
             'time_on_page',
+            'excessive_scroll',
+            'quick_back',
         ];
 
         $isWebVitals = $type === 'custom' && (($payload['custom_name'] ?? null) === 'web_vitals');

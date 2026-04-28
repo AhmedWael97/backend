@@ -33,6 +33,8 @@ use App\Http\Controllers\Ux\UxHeatmapController;
 use App\Http\Controllers\Ux\UxErrorsController;
 use App\Http\Controllers\Ux\UxScrollDepthController;
 use App\Http\Controllers\Ux\UxWebVitalsController;
+use App\Http\Controllers\Replay\ReplayIngestController;
+use App\Http\Controllers\Replay\ReplayController;
 use App\Http\Controllers\Ai\AiController;
 use App\Http\Controllers\Admin\AdminAuditLogController;
 use App\Http\Controllers\Admin\AdminDomainController;
@@ -80,6 +82,7 @@ Route::prefix('v1')->middleware('api.key')->group(function () {
     */
     Route::post('track', TrackController::class)->name('track')->middleware('throttle:300,1');
     Route::post('track/optout', OptoutController::class)->name('track.optout');
+    Route::post('track/replay', ReplayIngestController::class)->name('track.replay')->middleware('throttle:120,1');
     Route::options('track', CorsPreflightController::class);
 
     /*
@@ -364,10 +367,15 @@ Route::prefix('v1')->middleware('api.key')->group(function () {
         | Session Replay stubs (Phase 2)
         |--------------------------------------------------------------------------
         */
+        /*
+        |--------------------------------------------------------------------------
+        | Session Replay
+        |--------------------------------------------------------------------------
+        */
         Route::prefix('replay/{domainId}')->name('replay.')->group(function () {
-            Route::get('sessions', fn() => response()->json(['feature' => 'disabled', 'phase' => 2], 503));
-            Route::get('sessions/{sessionId}', fn() => response()->json(['feature' => 'disabled', 'phase' => 2], 503));
-            Route::delete('sessions/{sessionId}', fn() => response()->json(['feature' => 'disabled', 'phase' => 2], 503));
+            Route::get('sessions', [ReplayController::class, 'sessions'])->name('sessions');
+            Route::get('sessions/{sessionId}', [ReplayController::class, 'events'])->name('events');
+            Route::delete('sessions/{sessionId}', [ReplayController::class, 'destroy'])->name('destroy');
         });
 
         /*

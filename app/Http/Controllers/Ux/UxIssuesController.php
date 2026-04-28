@@ -49,7 +49,8 @@ class UxIssuesController extends Controller
                 details,
                 count() AS occurrences,
                 uniq(visitor_id) AS affected_visitors,
-                max(created_at)  AS last_seen
+                max(created_at)  AS last_seen,
+                any(session_id)  AS sample_session_id
             FROM ux_events
             WHERE {$where}
             GROUP BY type, url, element_selector, details
