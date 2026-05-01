@@ -59,11 +59,14 @@ class ReplayController extends Controller
         $safeSession = addslashes($sessionId);
 
         $rows = $this->clickhouse->select("
-            SELECT rrweb_type AS type, data, toUnixTimestamp(timestamp) * 1000 AS timestamp
+            SELECT
+                rrweb_type AS type,
+                data,
+                if(ts_ms > 0, ts_ms, toUnixTimestamp(timestamp) * 1000) AS timestamp
             FROM replay_events
             WHERE domain_id = {$domain->id}
               AND session_id = '{$safeSession}'
-            ORDER BY timestamp ASC, event_index ASC
+            ORDER BY if(ts_ms > 0, ts_ms, toUnixTimestamp(timestamp) * 1000) ASC, event_index ASC
             LIMIT 10000
         ");
 

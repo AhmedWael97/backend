@@ -30,9 +30,24 @@ class ClickHouseMigrateCommand extends Command
             $this->line("  ✓ {$name}");
         }
 
+        // Column alterations — safe to run repeatedly (IF NOT EXISTS).
+        $this->info('Applying column alterations...');
+        $alterations = $this->alterations();
+        foreach ($alterations as $desc => $ddl) {
+            $ch->statement($ddl);
+            $this->line("  ✓ {$desc}");
+        }
+
         $this->info('ClickHouse migration complete.');
 
         return self::SUCCESS;
+    }
+
+    private function alterations(): array
+    {
+        return [
+            'replay_events.ts_ms' => 'ALTER TABLE replay_events ADD COLUMN IF NOT EXISTS ts_ms UInt64 DEFAULT 0',
+        ];
     }
 
     private function definitions(): array
@@ -151,6 +166,7 @@ class ClickHouseMigrateCommand extends Command
                     event_index     UInt32,
                     rrweb_type      UInt8,
                     data            String,
+                    ts_ms           UInt64 DEFAULT 0,
                     timestamp       DateTime DEFAULT now()
                 ) ENGINE = MergeTree()
                 PARTITION BY toYYYYMM(timestamp)

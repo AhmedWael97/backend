@@ -73,12 +73,15 @@ class ReplayIngestController extends Controller
                 $startUrl = substr((string) $event['data']['href'], 0, 2048);
             }
 
+            $tsMsRaw = isset($event['timestamp']) ? (int) $event['timestamp'] : 0;
+
             $rows[] = [
                 'domain_id' => (int) $domain->id,
                 'session_id' => $sessionId,
                 'event_index' => $eventIndex++,
                 'rrweb_type' => $type,
                 'data' => json_encode($event['data'] ?? []) ?: '{}',
+                'ts_ms' => $tsMsRaw,
                 'timestamp' => $timestamp,
             ];
         }
