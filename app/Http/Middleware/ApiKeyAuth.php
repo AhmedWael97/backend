@@ -46,7 +46,7 @@ class ApiKeyAuth
 
         // Tracker endpoints authenticate via script_token, not API keys — skip key check.
         $path = ltrim($request->path(), '/');
-        if (preg_match('#^api/v1/track(/|$)#', $path)) {
+        if (preg_match('#^api/(v1/)?(track|collect)(/|$)#', $path)) {
             return $next($request);
         }
 

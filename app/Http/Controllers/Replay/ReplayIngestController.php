@@ -54,6 +54,7 @@ class ReplayIngestController extends Controller
 
         $rows = [];
         $startUrl = '';
+        $eventIndex = 0;
 
         foreach ($events as $event) {
             if (!is_array($event)) {
@@ -63,7 +64,7 @@ class ReplayIngestController extends Controller
             $type = (int) ($event['type'] ?? 0);
 
             // rrweb timestamps are Unix milliseconds; convert to DateTime
-            $ts = isset($event['timestamp'])
+            $timestamp = isset($event['timestamp'])
                 ? date('Y-m-d H:i:s', (int) floor((int) $event['timestamp'] / 1000))
                 : now()->format('Y-m-d H:i:s');
 
@@ -75,9 +76,10 @@ class ReplayIngestController extends Controller
             $rows[] = [
                 'domain_id' => (int) $domain->id,
                 'session_id' => $sessionId,
-                'type' => $type,
+                'event_index' => $eventIndex++,
+                'rrweb_type' => $type,
                 'data' => json_encode($event['data'] ?? []) ?: '{}',
-                'ts' => $ts,
+                'timestamp' => $timestamp,
             ];
         }
 
@@ -90,7 +92,7 @@ class ReplayIngestController extends Controller
             ['domain_id' => $domain->id, 'session_id' => $sessionId],
             [
                 'visitor_id' => $visitorId,
-                'start_url' => $startUrl ?: null,
+                'start_url' => $startUrl ?: '',
                 'event_count' => 0,
                 'status' => 'recording',
                 'recorded_at' => now(),

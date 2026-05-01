@@ -20,6 +20,9 @@ use App\Http\Controllers\Analytics\RealtimeController;
 use App\Http\Controllers\Analytics\ReferrersController;
 use App\Http\Controllers\Analytics\StatsController;
 use App\Http\Controllers\Analytics\VisitorController;
+use App\Http\Controllers\Analytics\CampaignsController;
+use App\Http\Controllers\Analytics\EngagedVisitorsController;
+use App\Http\Controllers\Analytics\SummaryController;
 use App\Http\Controllers\BillingController;
 use App\Http\Controllers\Domain\DomainController;
 use App\Http\Controllers\Domain\PipelineManagementController;
@@ -55,6 +58,7 @@ use App\Http\Controllers\OnboardingController;
 use App\Http\Controllers\SavedViewController;
 use App\Http\Controllers\SharedReportController;
 use App\Http\Controllers\ThemeController;
+use App\Http\Controllers\Tools\SeoCheckerController;
 use App\Http\Controllers\WebhookController;
 use Illuminate\Support\Facades\Route;
 
@@ -63,6 +67,8 @@ use Illuminate\Support\Facades\Route;
 | API v1 versioning — all routes below are accessible as /api/v1/...
 | The prefix is applied once here so every route name and URL gains /v1/.
 | api.key middleware validates the shared frontend public/secret key pair.
+| Non-versioned tracker paths (/api/track/*, /api/collect/*) are handled
+| at the nginx level by rewriting them to /api/v1/... before reaching PHP.
 |--------------------------------------------------------------------------
 */
 Route::prefix('v1')->middleware('api.key')->group(function () {
@@ -75,6 +81,11 @@ Route::prefix('v1')->middleware('api.key')->group(function () {
     Route::get('health', HealthController::class)->name('health');
     Route::get('theme', [ThemeController::class, 'show'])->name('theme');
 
+    // SEO checker — auth required, rate-limited to prevent abuse
+    Route::post('tools/seo-check', SeoCheckerController::class)
+        ->name('tools.seo-check')
+        ->middleware(['auth:sanctum', 'throttle:20,1']);
+
     /*
     |--------------------------------------------------------------------------
     | Tracker endpoints (public, no auth)
@@ -83,7 +94,17 @@ Route::prefix('v1')->middleware('api.key')->group(function () {
     Route::post('track', TrackController::class)->name('track')->middleware('throttle:300,1');
     Route::post('track/optout', OptoutController::class)->name('track.optout');
     Route::post('track/replay', ReplayIngestController::class)->name('track.replay')->middleware('throttle:120,1');
+    // CORS preflight for all tracker sub-paths
     Route::options('track', CorsPreflightController::class);
+    Route::options('track/replay', CorsPreflightController::class);
+    Route::options('track/optout', CorsPreflightController::class);
+    // Alias: /collect/* → same controllers (supports trackers installed with data-api ending in /collect)
+    Route::post('collect', TrackController::class)->middleware('throttle:300,1');
+    Route::post('collect/optout', OptoutController::class);
+    Route::post('collect/replay', ReplayIngestController::class)->middleware('throttle:120,1');
+    Route::options('collect', CorsPreflightController::class);
+    Route::options('collect/replay', CorsPreflightController::class);
+    Route::options('collect/optout', CorsPreflightController::class);
 
     /*
     |--------------------------------------------------------------------------
@@ -331,6 +352,9 @@ Route::prefix('v1')->middleware('api.key')->group(function () {
             Route::get('overview', OverviewController::class)->name('overview');
             Route::get('visitors', [VisitorController::class, 'index'])->name('visitors');
             Route::get('visitors/{visitorId}', [VisitorController::class, 'show'])->name('visitors.show');
+            Route::get('campaigns', CampaignsController::class)->name('campaigns');
+            Route::get('engaged-visitors', EngagedVisitorsController::class)->name('engaged-visitors');
+            Route::get('summary', SummaryController::class)->name('summary');
         });
 
         /*

@@ -15,16 +15,7 @@ return [
     // Dashboard/admin frontend origins. The tracker endpoints set their own
     // Access-Control-Allow-Origin: * header directly in the controller, so
     // arbitrary customer sites are handled there without a global wildcard.
-    'allowed_origins' => [
-        'http://localhost:3000',
-        'http://localhost:3001',
-        'http://localhost:8000',
-        'http://127.0.0.1:3000',
-        'http://127.0.0.1:3001',
-        'http://127.0.0.1:8000',
-        'https://www.eye-analsyis.live',
-        'https://eye-analsyis.live',
-    ],
+    'allowed_origins' => ['*'],
 
     'allowed_origins_patterns' => [],
 
