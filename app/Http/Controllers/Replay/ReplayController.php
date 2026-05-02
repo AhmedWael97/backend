@@ -70,10 +70,15 @@ class ReplayController extends Controller
             LIMIT 10000
         ");
 
-        // Decode the stored JSON data field so the frontend gets native objects.
+        // Decode the stored JSON data field and extract event structure
+        // CRITICAL FIX: Return proper rrweb event format with type, data, timestamp
         $events = array_map(function (array $row) {
-            $row['data'] = json_decode((string) ($row['data'] ?? '{}'), true) ?? [];
-            return $row;
+            $fullEvent = json_decode((string) ($row['data'] ?? '{}'), true) ?? [];
+            return [
+                'type' => (int) ($fullEvent['type'] ?? $row['type'] ?? 0),
+                'data' => $fullEvent['data'] ?? [],
+                'timestamp' => (int) ($fullEvent['timestamp'] ?? $row['timestamp'] ?? 0),
+            ];
         }, $rows);
 
         return $this->success($events);

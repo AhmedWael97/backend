@@ -54,7 +54,8 @@ class ReplayIngestController extends Controller
 
         $rows = [];
         $startUrl = '';
-        $eventIndex = 0;
+
+        $counterKey = sprintf('eye:replay:idx:%d:%s', (int) $domain->id, $sessionId);
 
         foreach ($events as $event) {
             if (!is_array($event)) {
@@ -75,12 +76,28 @@ class ReplayIngestController extends Controller
 
             $tsMsRaw = isset($event['timestamp']) ? (int) $event['timestamp'] : 0;
 
+            // CRITICAL FIX: Store entire event structure, not just data field
+            // The FullSnapshot event needs complete data including node tree
+            $eventData = [
+                'type' => $type,
+                'data' => $event['data'] ?? [],
+                'timestamp' => $event['timestamp'] ?? 0,
+            ];
+
+            $encodedData = json_encode($eventData, JSON_UNESCAPED_SLASHES | JSON_INVALID_UTF8_SUBSTITUTE);
+            if ($encodedData === false) {
+                $encodedData = '{"type":0,"data":{},"timestamp":0}';
+            }
+
+            // Maintain monotonic event ordering across all flush batches.
+            $eventIndex = (int) Redis::incr($counterKey);
+
             $rows[] = [
                 'domain_id' => (int) $domain->id,
                 'session_id' => $sessionId,
-                'event_index' => $eventIndex++,
+                'event_index' => $eventIndex,
                 'rrweb_type' => $type,
-                'data' => json_encode($event['data'] ?? []) ?: '{}',
+                'data' => $encodedData,
                 'ts_ms' => $tsMsRaw,
                 'timestamp' => $timestamp,
             ];

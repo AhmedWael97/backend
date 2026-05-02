@@ -25,6 +25,9 @@ class UxHeatmapController extends Controller
         $to = $request->query('to', now()->format('Y-m-d'));
 
         $safeUrl = addslashes($url);
+        $urlFilter = $safeUrl !== ''
+            ? "AND url LIKE '%{$safeUrl}%'"
+            : '';
 
         $rows = $this->clickhouse->select("
             SELECT
@@ -34,10 +37,12 @@ class UxHeatmapController extends Controller
                 count() AS count
             FROM ux_events
             WHERE domain_id = {$domain->id}
-              AND type IN ('rage_click', 'dead_click')
-              AND url LIKE '%{$safeUrl}%'
+                            AND type IN ('click', 'rage_click', 'dead_click')
+                            {$urlFilter}
               AND created_at >= '{$from} 00:00:00'
               AND created_at <= '{$to} 23:59:59'
+                            AND x > 0
+                            AND y > 0
             GROUP BY type, x, y
             ORDER BY count DESC
             LIMIT 2000
