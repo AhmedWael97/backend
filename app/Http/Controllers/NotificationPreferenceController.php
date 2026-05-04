@@ -18,13 +18,14 @@ class NotificationPreferenceController extends Controller
 
     public function update(Request $request): JsonResponse
     {
-        $items = $request->validate([
-            '*.type' => ['required', 'string'],
-            '*.in_app' => ['required', 'boolean'],
-            '*.email' => ['required', 'boolean'],
+        $data = $request->validate([
+            'preferences' => ['required', 'array'],
+            'preferences.*.type' => ['required', 'string'],
+            'preferences.*.in_app' => ['required', 'boolean'],
+            'preferences.*.email' => ['required', 'boolean'],
         ]);
 
-        foreach ($items as $item) {
+        foreach ($data['preferences'] as $item) {
             NotificationPreference::where('user_id', $request->user()->id)
                 ->where('type', $item['type'])
                 ->update([

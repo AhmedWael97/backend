@@ -232,6 +232,7 @@ Route::prefix('v1')->middleware('api.key')->group(function () {
 
         // Shared reports
         Route::prefix('shared-reports')->name('shared-reports.')->group(function () {
+            Route::get('/', [SharedReportController::class, 'listAll'])->name('list');
             Route::post('/', [SharedReportController::class, 'store'])->name('store');
             Route::get('{domainId}', [SharedReportController::class, 'index'])->name('index');
             Route::delete('{id}', [SharedReportController::class, 'destroy'])->name('destroy');

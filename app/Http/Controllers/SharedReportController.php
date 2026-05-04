@@ -29,6 +29,16 @@ class SharedReportController extends Controller
         );
     }
 
+    public function listAll(Request $request): JsonResponse
+    {
+        $reports = SharedReport::where('user_id', $request->user()->id)
+            ->where(fn($q) => $q->whereNull('expires_at')->orWhere('expires_at', '>', now()))
+            ->latest()
+            ->get();
+
+        return $this->success($reports);
+    }
+
     public function store(Request $request): JsonResponse
     {
         $data = $request->validate([

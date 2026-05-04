@@ -23,7 +23,7 @@ test('can request an export', function () {
             'format' => 'csv',
         ]);
 
-    $response->assertCreated();
+    $response->assertStatus(202);
     expect(ExportJob::where('user_id', $this->user->id)->exists())->toBeTrue();
 });
 
@@ -74,5 +74,5 @@ test('cannot download export belonging to another user', function () {
 
     $response = $this->withToken($this->token)->getJson("/api/exports/{$export->id}/download");
 
-    $response->assertStatus(403);
+    $response->assertStatus(404);
 });

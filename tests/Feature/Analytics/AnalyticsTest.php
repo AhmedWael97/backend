@@ -54,7 +54,7 @@ describe('GET /api/domains/{domain}/analytics/stats', function () {
         $this->actingAs($user)
             ->getJson("/api/domains/{$domain->id}/analytics/stats?start=not-a-date")
             ->assertStatus(422)
-            ->assertJsonValidationErrors(['start']);
+            ->assertJsonValidationErrors(['start'], 'data.errors');
     });
 
     it('rejects end date before start date', function () {
@@ -64,7 +64,7 @@ describe('GET /api/domains/{domain}/analytics/stats', function () {
         $this->actingAs($user)
             ->getJson("/api/domains/{$domain->id}/analytics/stats?start=2026-01-10&end=2026-01-01")
             ->assertStatus(422)
-            ->assertJsonValidationErrors(['start']);
+            ->assertJsonValidationErrors(['start'], 'data.errors');
     });
 
     it('rejects invalid granularity', function () {
@@ -74,7 +74,7 @@ describe('GET /api/domains/{domain}/analytics/stats', function () {
         $this->actingAs($user)
             ->getJson("/api/domains/{$domain->id}/analytics/stats?granularity=second")
             ->assertStatus(422)
-            ->assertJsonValidationErrors(['granularity']);
+            ->assertJsonValidationErrors(['granularity'], 'data.errors');
     });
 
     it('returns summary and timeseries from analytics service', function () {
@@ -102,11 +102,13 @@ describe('GET /api/domains/{domain}/analytics/stats', function () {
             ->getJson("/api/domains/{$domain->id}/analytics/stats?granularity=day")
             ->assertOk()
             ->assertJsonStructure([
-                'summary' => ['pageviews', 'unique_visitors', 'sessions', 'bounce_rate', 'avg_duration'],
-                'timeseries' => [['period', 'pageviews', 'unique_visitors', 'sessions']],
+                'data' => [
+                    'summary' => ['pageviews', 'unique_visitors', 'sessions', 'bounce_rate', 'avg_duration'],
+                    'timeseries' => [['period', 'pageviews', 'unique_visitors', 'sessions']],
+                ],
             ])
-            ->assertJsonPath('summary.pageviews', 1000)
-            ->assertJsonPath('summary.bounce_rate', 38.5);
+            ->assertJsonPath('data.summary.pageviews', 1000)
+            ->assertJsonPath('data.summary.bounce_rate', 38.5);
     });
 });
 
@@ -198,7 +200,7 @@ describe('GET /api/domains/{domain}/analytics/devices', function () {
         $this->actingAs($user)
             ->getJson("/api/domains/{$domain->id}/analytics/devices")
             ->assertOk()
-            ->assertJsonStructure(['browsers', 'os', 'devices']);
+            ->assertJsonStructure(['data' => ['browsers', 'os', 'devices']]);
     });
 });
 
@@ -224,7 +226,7 @@ describe('GET /api/domains/{domain}/analytics/geo', function () {
         $this->actingAs($user)
             ->getJson("/api/domains/{$domain->id}/analytics/geo")
             ->assertOk()
-            ->assertJsonStructure(['countries', 'regions']);
+            ->assertJsonStructure(['data' => ['countries', 'regions']]);
     });
 });
 
@@ -280,7 +282,7 @@ describe('GET /api/domains/{domain}/analytics/realtime', function () {
         $this->actingAs($user)
             ->getJson("/api/domains/{$domain->id}/analytics/realtime")
             ->assertOk()
-            ->assertJsonPath('active_visitors', 7)
-            ->assertJsonStructure(['active_visitors', 'ts']);
+            ->assertJsonPath('data.active_visitors', 7)
+            ->assertJsonStructure(['data' => ['active_visitors', 'ts']]);
     });
 });
