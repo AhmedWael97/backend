@@ -99,5 +99,5 @@ test('cannot manage webhooks for another users domain', function () {
             'events' => ['pageview'],
         ]);
 
-    $response->assertStatus(403);
+    $response->assertStatus(404);
 });

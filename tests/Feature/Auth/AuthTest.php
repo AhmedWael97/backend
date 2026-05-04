@@ -25,7 +25,7 @@ test('user can register with valid data', function () {
     ]);
 
     $response->assertStatus(201)
-        ->assertJsonStructure(['user' => ['id', 'name', 'email'], 'token']);
+        ->assertJsonStructure(['data' => ['user' => ['id', 'name', 'email'], 'token']]);
 
     $this->assertDatabaseHas('users', ['email' => 'test@example.com']);
 });
@@ -66,7 +66,7 @@ test('user can login with valid credentials', function () {
     $this->postJson('/api/auth/login', [
         'email' => 'login@example.com',
         'password' => 'Password1',
-    ])->assertOk()->assertJsonStructure(['user', 'token']);
+    ])->assertOk()->assertJsonStructure(['data' => ['user', 'token']]);
 });
 
 test('login fails with wrong password', function () {
@@ -139,7 +139,7 @@ test('authenticated user can view profile', function () {
     $this->withToken($token)
         ->getJson('/api/profile')
         ->assertOk()
-        ->assertJsonStructure(['user' => ['id', 'name', 'email']]);
+        ->assertJsonStructure(['data' => ['user' => ['id', 'name', 'email']]]);
 });
 
 test('unauthenticated request is rejected', function () {
@@ -153,5 +153,5 @@ test('user can update profile', function () {
     $this->withToken($token)
         ->patchJson('/api/profile', ['locale' => 'ar', 'appearance' => 'dark'])
         ->assertOk()
-        ->assertJsonPath('user.locale', 'ar');
+        ->assertJsonPath('data.user.locale', 'ar');
 });

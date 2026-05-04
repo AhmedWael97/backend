@@ -126,7 +126,7 @@ test('user can rotate script token', function () {
     $this->withToken($token)
         ->postJson("/api/domains/{$domain->id}/rotate-token")
         ->assertOk()
-        ->assertJsonStructure(['script_token', 'previous_script_token', 'token_rotated_at']);
+        ->assertJsonStructure(['data' => ['script_token', 'previous_script_token', 'token_rotated_at']]);
 
     $domain->refresh();
     expect($domain->script_token)->not->toBe($oldToken);
@@ -146,7 +146,7 @@ test('verify-script returns false when no beacon received', function () {
     $this->withToken($token)
         ->postJson("/api/domains/{$domain->id}/verify-script")
         ->assertOk()
-        ->assertJsonPath('verified', false);
+        ->assertJsonPath('data.verified', false);
 });
 
 test('verify-script returns true when cache beacon present', function () {
@@ -159,7 +159,7 @@ test('verify-script returns true when cache beacon present', function () {
     $this->withToken($token)
         ->postJson("/api/domains/{$domain->id}/verify-script")
         ->assertOk()
-        ->assertJsonPath('verified', true);
+        ->assertJsonPath('data.verified', true);
 
     $this->assertDatabaseHas('domains', [
         'id' => $domain->id,
@@ -212,7 +212,7 @@ test('user can list exclusions', function () {
     $this->withToken($token)
         ->getJson("/api/domains/{$domain->id}/exclusions")
         ->assertOk()
-        ->assertJsonCount(2);
+        ->assertJsonCount(2, 'data');
 });
 
 test('user can delete an exclusion', function () {

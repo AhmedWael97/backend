@@ -51,7 +51,7 @@ test('superadmin can impersonate a user', function () {
     $response = $this->withToken($this->adminToken)
         ->postJson("/api/admin/users/{$target->id}/impersonate");
 
-    $response->assertOk()->assertJsonStructure(['token', 'user']);
+    $response->assertOk()->assertJsonStructure(['data' => ['token', 'target_user', 'expires_at']]);
 });
 
 test('superadmin can end impersonation', function () {
@@ -65,7 +65,7 @@ test('superadmin can end impersonation', function () {
 test('superadmin can view admin stats', function () {
     $response = $this->withToken($this->adminToken)->getJson('/api/admin/stats');
 
-    $response->assertOk()->assertJsonStructure(['users', 'domains']);
+    $response->assertOk()->assertJsonStructure(['data' => ['total_users', 'active_users', 'active_subscriptions']]);
 });
 
 test('regular user cannot access admin stats', function () {

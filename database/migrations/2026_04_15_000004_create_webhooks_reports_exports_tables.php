@@ -65,27 +65,10 @@ return new class extends Migration {
 
             $table->index(['user_id', 'status']);
         });
-
-        Schema::create('session_replays', function (Blueprint $table) {
-            $table->id();
-            $table->foreignId('domain_id')->constrained()->cascadeOnDelete();
-            $table->string('session_id', 36)->index();
-            $table->string('visitor_id', 36)->index();
-            $table->string('start_url');
-            $table->unsignedInteger('duration_seconds')->default(0);
-            $table->unsignedInteger('event_count')->default(0);
-            $table->unsignedInteger('size_bytes')->default(0);
-            $table->enum('status', ['recording', 'complete', 'pruned'])->default('recording');
-            $table->timestamp('recorded_at')->nullable();
-            $table->timestamps();
-
-            $table->index(['domain_id', 'recorded_at']);
-        });
     }
 
     public function down(): void
     {
-        Schema::dropIfExists('session_replays');
         Schema::dropIfExists('export_jobs');
         Schema::dropIfExists('saved_views');
         Schema::dropIfExists('shared_reports');

@@ -59,5 +59,5 @@ test('cannot access ai endpoints for another users domain', function () {
     $response = $this->withToken($this->token)
         ->getJson("/api/ai/{$otherDomain->id}/quota");
 
-    $response->assertStatus(403);
+    $response->assertStatus(404);
 });

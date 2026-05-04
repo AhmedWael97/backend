@@ -88,5 +88,5 @@ test('cannot manage alert rules for another users domain', function () {
             'channel' => 'in_app',
         ]);
 
-    $response->assertStatus(403);
+    $response->assertStatus(404);
 });

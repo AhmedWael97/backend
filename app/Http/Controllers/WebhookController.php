@@ -38,7 +38,7 @@ class WebhookController extends Controller
         $webhook = Webhook::create([
             'domain_id' => $domain->id,
             'url' => $data['url'],
-            'secret' => $data['secret'] ?? Str::random(32),
+            'secret' => $data['secret'] ?? bin2hex(random_bytes(32)),
             'events' => $data['events'],
             'is_active' => $data['is_active'] ?? true,
         ]);

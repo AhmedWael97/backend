@@ -18,4 +18,11 @@ class StoreDomainRequest extends FormRequest
             'settings' => ['sometimes', 'array'],
         ];
     }
+
+    protected function prepareForValidation(): void
+    {
+        if ($this->has('domain')) {
+            $this->merge(['domain' => strtolower($this->domain)]);
+        }
+    }
 }
