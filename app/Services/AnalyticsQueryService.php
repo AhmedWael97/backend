@@ -41,15 +41,20 @@ class AnalyticsQueryService
             'avg_duration' => 0,
         ];
 
-        // Bounce rate from sessions table (page_count = 1 means single-page session = bounce)
+        // Bounce rate from events — count sessions with exactly 1 pageview.
+        // Derived at query time so it is never stale (avoids sessions table mutations).
         $bounceRows = $this->clickhouse->select("
             SELECT
-                countIf(page_count = 1) AS bounced,
-                count()                  AS total
-            FROM sessions
-            WHERE domain_id = {$domainId}
-              AND started_at >= '{$startStr}'
-              AND started_at < '{$endStr}'
+                countIf(pv_count = 1) AS bounced,
+                count()               AS total
+            FROM (
+                SELECT session_id, countIf(type = 'pageview') AS pv_count
+                FROM events
+                WHERE domain_id = {$domainId}
+                  AND ts >= '{$startStr}'
+                  AND ts < '{$endStr}'
+                GROUP BY session_id
+            )
         ");
 
         $brRow = $bounceRows[0] ?? ['bounced' => 0, 'total' => 0];

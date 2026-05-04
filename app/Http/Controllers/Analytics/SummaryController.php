@@ -48,31 +48,38 @@ class SummaryController extends Controller
         $prevStartDt = $prevStart . ' 00:00:00';
         $prevEndDt = $prevEnd . ' 23:59:59';
 
-        // ── Core traffic metrics ──────────────────────────────────────────────
+        // ── Core traffic metrics (derived from events — no stale sessions columns) ──
+        // Subquery groups by session_id to compute per-session stats, then the outer
+        // query aggregates across all sessions for the period.
+        $sessionSubquery = fn(string $start, string $end) =>
+            "SELECT any(visitor_id) AS visitor_id, session_id,
+                    countIf(type = 'pageview')                      AS pv_count,
+                    max(toUnixTimestamp(ts)) - min(toUnixTimestamp(ts)) AS dur
+             FROM events
+             WHERE domain_id = {$did} AND ts BETWEEN '{$start}' AND '{$end}'
+             GROUP BY session_id";
+
         $traffic = $this->ch->select("
             SELECT
-                uniq(visitor_id)                                   AS visitors,
-                count()                                            AS sessions,
-                sum(page_count)                                    AS pageviews,
-                round(avg(duration_seconds))                       AS avg_duration,
-                round(countIf(page_count=1)/count()*100,1)         AS bounce_rate,
-                round(avg(page_count),1)                           AS avg_pages
-            FROM sessions
-            WHERE domain_id={$did}
-              AND started_at BETWEEN '{$startDt}' AND '{$endDt}'
+                uniq(visitor_id)                                    AS visitors,
+                count()                                             AS sessions,
+                sum(pv_count)                                       AS pageviews,
+                round(avgIf(dur, dur > 0))                          AS avg_duration,
+                round(countIf(pv_count = 1) / count() * 100, 1)    AS bounce_rate,
+                round(avg(pv_count), 1)                             AS avg_pages
+            FROM ({$sessionSubquery($startDt, $endDt)})
         ");
         $t = $traffic[0] ?? [];
 
         $prevTraffic = $this->ch->select("
             SELECT
-                uniq(visitor_id) AS visitors,
-                count()          AS sessions,
-                sum(page_count)  AS pageviews,
-                round(avg(duration_seconds)) AS avg_duration,
-                round(countIf(page_count=1)/count()*100,1) AS bounce_rate
-            FROM sessions
-            WHERE domain_id={$did}
-              AND started_at BETWEEN '{$prevStartDt}' AND '{$prevEndDt}'
+                uniq(visitor_id)                                    AS visitors,
+                count()                                             AS sessions,
+                sum(pv_count)                                       AS pageviews,
+                round(avgIf(dur, dur > 0))                          AS avg_duration,
+                round(countIf(pv_count = 1) / count() * 100, 1)    AS bounce_rate,
+                round(avg(pv_count), 1)                             AS avg_pages
+            FROM ({$sessionSubquery($prevStartDt, $prevEndDt)})
         ");
         $pt = $prevTraffic[0] ?? [];
 
@@ -87,10 +94,11 @@ class SummaryController extends Controller
 
         // ── Top countries ─────────────────────────────────────────────────────
         $topCountries = $this->ch->select("
-            SELECT if(country='','Unknown',country) AS country, count() AS sessions
-            FROM sessions
-            WHERE domain_id={$did}
-              AND started_at BETWEEN '{$startDt}' AND '{$endDt}'
+            SELECT if(country = '', 'Unknown', country) AS country,
+                   uniq(session_id) AS sessions
+            FROM events
+            WHERE domain_id = {$did} AND type = 'pageview'
+              AND ts BETWEEN '{$startDt}' AND '{$endDt}'
             GROUP BY country ORDER BY sessions DESC LIMIT 5
         ");
 
@@ -115,14 +123,23 @@ class SummaryController extends Controller
         // ── Top campaign ─────────────────────────────────────────────────────
         $topCampaign = $this->ch->select("
             SELECT
-                if(utm_source='','(direct)',utm_source) AS source,
-                if(utm_campaign='','(none)',utm_campaign) AS campaign,
-                count() AS sessions,
-                uniq(visitor_id) AS visitors,
-                round(avg(duration_seconds)) AS avg_duration
-            FROM sessions
-            WHERE domain_id={$did}
-              AND started_at BETWEEN '{$startDt}' AND '{$endDt}'
+                if(us = '', '(direct)', us)   AS source,
+                if(uc = '', '(none)', uc)      AS campaign,
+                count()                        AS sessions,
+                uniq(visitor_id)               AS visitors,
+                round(avgIf(dur, dur > 0))     AS avg_duration
+            FROM (
+                SELECT
+                    session_id,
+                    any(visitor_id)                                     AS visitor_id,
+                    anyIf(utm_source,   utm_source != '')               AS us,
+                    anyIf(utm_campaign, utm_campaign != '')             AS uc,
+                    max(toUnixTimestamp(ts)) - min(toUnixTimestamp(ts)) AS dur
+                FROM events
+                WHERE domain_id = {$did}
+                  AND ts BETWEEN '{$startDt}' AND '{$endDt}'
+                GROUP BY session_id
+            )
             GROUP BY source, campaign
             ORDER BY sessions DESC LIMIT 5
         ");
@@ -133,12 +150,19 @@ class SummaryController extends Controller
             FROM (
                 SELECT
                     visitor_id,
-                    count()                          AS scount,
-                    round(avg(duration_seconds))     AS avg_dur,
-                    round(avg(page_count),1)         AS avg_pgs
-                FROM sessions
-                WHERE domain_id={$did}
-                  AND started_at BETWEEN '{$startDt}' AND '{$endDt}'
+                    uniq(session_id)                    AS scount,
+                    round(avgIf(dur, dur > 0))          AS avg_dur,
+                    round(avg(pv_count), 1)             AS avg_pgs
+                FROM (
+                    SELECT
+                        visitor_id, session_id,
+                        max(toUnixTimestamp(ts)) - min(toUnixTimestamp(ts)) AS dur,
+                        countIf(type = 'pageview')  AS pv_count
+                    FROM events
+                    WHERE domain_id = {$did}
+                      AND ts BETWEEN '{$startDt}' AND '{$endDt}'
+                    GROUP BY visitor_id, session_id
+                )
                 GROUP BY visitor_id
                 HAVING scount >= 2 OR avg_dur >= 120 OR avg_pgs >= 3
             )
@@ -162,12 +186,12 @@ class SummaryController extends Controller
 
         // ── Daily trend (chart) ───────────────────────────────────────────────
         $trend = $this->ch->select("
-            SELECT toDate(started_at) AS date,
-                   uniq(visitor_id) AS visitors,
-                   count()          AS sessions
-            FROM sessions
-            WHERE domain_id={$did}
-              AND started_at BETWEEN '{$startDt}' AND '{$endDt}'
+            SELECT toDate(ts)         AS date,
+                   uniq(visitor_id)   AS visitors,
+                   uniq(session_id)   AS sessions
+            FROM events
+            WHERE domain_id = {$did} AND type = 'pageview'
+              AND ts BETWEEN '{$startDt}' AND '{$endDt}'
             GROUP BY date ORDER BY date ASC
         ");
 

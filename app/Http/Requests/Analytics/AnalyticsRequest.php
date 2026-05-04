@@ -19,7 +19,29 @@ class AnalyticsRequest extends FormRequest
             'end' => ['nullable', 'date'],
             'granularity' => ['nullable', 'in:hour,day,week,month'],
             'limit' => ['nullable', 'integer', 'min:1', 'max:100'],
+            'compare' => ['nullable', 'boolean'],
         ];
+    }
+
+    public function compare(): bool
+    {
+        return $this->boolean('compare');
+    }
+
+    public function prevStart(): Carbon
+    {
+        $s = $this->start();
+        $e = $this->end();
+        $diff = (int) $s->diffInDays($e) + 1;
+        return (clone $s)->subDays($diff);
+    }
+
+    public function prevEnd(): Carbon
+    {
+        $s = $this->start();
+        $e = $this->end();
+        $diff = (int) $s->diffInDays($e) + 1;
+        return (clone $e)->subDays($diff);
     }
 
     public function start(): Carbon

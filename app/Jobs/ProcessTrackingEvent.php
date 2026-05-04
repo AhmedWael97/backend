@@ -89,26 +89,45 @@ class ProcessTrackingEvent implements ShouldQueue
                     ->onQueue('ai');
             }
 
-            $clickhouse->insertJson('sessions', [
-                [
-                    'domain_id' => $row['domain_id'],
-                    'session_id' => $row['session_id'],
-                    'visitor_id' => $row['visitor_id'],
-                    'duration_seconds' => 0,
-                    'page_count' => 1,
-                    'country' => $row['country'],
-                    'device' => $row['device_type'],
-                    'browser' => $row['browser'],
-                    'os' => $row['os'],
-                    'entry_url' => $row['url'],
-                    'exit_url' => $row['url'],
-                    'utm_source' => $utmSource,
-                    'utm_medium' => $utmMedium,
-                    'utm_campaign' => $utmCampaign,
-                    'company_name' => $companyName,
-                    'started_at' => $row['ts'],
-                ]
-            ]);
+            // Use Redis NX to insert the session row exactly once.
+            // Subsequent pageviews in the same session increment page_count via
+            // an ALTER TABLE mutation (ClickHouse async, acceptable for analytics).
+            $sessionCacheKey = "eye:sess:{$row['session_id']}";
+            $isNewSession = Redis::set($sessionCacheKey, '1', 'EX', 14400, 'NX');
+
+            if ($isNewSession) {
+                $clickhouse->insertJson('sessions', [
+                    [
+                        'domain_id' => $row['domain_id'],
+                        'session_id' => $row['session_id'],
+                        'visitor_id' => $row['visitor_id'],
+                        'duration_seconds' => 0,
+                        'page_count' => 1,
+                        'country' => $row['country'],
+                        'device' => $row['device_type'],
+                        'browser' => $row['browser'],
+                        'os' => $row['os'],
+                        'entry_url' => $row['url'],
+                        'exit_url' => $row['url'],
+                        'utm_source' => $utmSource,
+                        'utm_medium' => $utmMedium,
+                        'utm_campaign' => $utmCampaign,
+                        'company_name' => $companyName,
+                        'started_at' => $row['ts'],
+                    ]
+                ]);
+            } else {
+                // Subsequent pageview — bump page_count and track exit URL.
+                // session_id is a UUID (hex + hyphens only); domain_id is cast to int.
+                $safeExitUrl = str_replace(["\\", "'"], ["\\\\", "\\'"], $row['url']);
+                $sid = (string) $row['session_id'];
+                $did = (int) $row['domain_id'];
+                $clickhouse->statement(
+                    "ALTER TABLE sessions UPDATE page_count = page_count + 1,"
+                    . " exit_url = '{$safeExitUrl}'"
+                    . " WHERE session_id = '{$sid}' AND domain_id = {$did}"
+                );
+            }
         }
 
         // Match pageview URL against pipeline steps and write to pipeline_events

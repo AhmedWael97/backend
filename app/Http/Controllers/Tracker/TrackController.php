@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Tracker;
 
 use App\Http\Controllers\Controller;
 use App\Jobs\ProcessTrackingEvent;
+use App\Models\BotHit;
 use App\Models\Domain;
 use App\Models\DomainExclusion;
 use App\Models\VisitorOptout;
@@ -79,6 +80,7 @@ class TrackController extends Controller
 
         // --- Bot detection: reject headless/automation UAs silently ---
         if ($this->isBot($ua)) {
+            BotHit::incrementToday($domain->id);
             return response('', 200, $corsHeaders);
         }
 

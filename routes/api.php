@@ -20,6 +20,7 @@ use App\Http\Controllers\Analytics\RealtimeController;
 use App\Http\Controllers\Analytics\ReferrersController;
 use App\Http\Controllers\Analytics\StatsController;
 use App\Http\Controllers\Analytics\VisitorController;
+use App\Http\Controllers\Analytics\BotStatsController;
 use App\Http\Controllers\Analytics\CampaignsController;
 use App\Http\Controllers\Analytics\EngagedVisitorsController;
 use App\Http\Controllers\Analytics\SummaryController;
@@ -356,6 +357,7 @@ Route::prefix('v1')->middleware('api.key')->group(function () {
             Route::get('campaigns', CampaignsController::class)->name('campaigns');
             Route::get('engaged-visitors', EngagedVisitorsController::class)->name('engaged-visitors');
             Route::get('summary', SummaryController::class)->name('summary');
+            Route::get('bot-stats', BotStatsController::class)->name('bot-stats');
         });
 
         /*

@@ -17,12 +17,22 @@ class DevicesController extends BaseAnalyticsController
     {
         $this->ownedDomain($request, $domain);
 
-        $data = $this->analytics->devices(
+        $current = $this->analytics->devices(
             $domain->id,
             $request->start(),
             $request->end(),
         );
 
-        return $this->success($data);
+        if (!$request->compare()) {
+            return $this->success($current);
+        }
+
+        $prev = $this->analytics->devices(
+            $domain->id,
+            $request->prevStart(),
+            $request->prevEnd(),
+        );
+
+        return $this->success(['current' => $current, 'prev' => $prev]);
     }
 }

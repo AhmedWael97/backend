@@ -17,13 +17,24 @@ class PagesController extends BaseAnalyticsController
     {
         $this->ownedDomain($request, $domain);
 
-        $pages = $this->analytics->topPages(
+        $current = $this->analytics->topPages(
             $domain->id,
             $request->start(),
             $request->end(),
             $request->limit(),
         );
 
-        return $this->success($pages);
+        if (!$request->compare()) {
+            return $this->success($current);
+        }
+
+        $prev = $this->analytics->topPages(
+            $domain->id,
+            $request->prevStart(),
+            $request->prevEnd(),
+            $request->limit(),
+        );
+
+        return $this->success(['current' => $current, 'prev' => $prev]);
     }
 }

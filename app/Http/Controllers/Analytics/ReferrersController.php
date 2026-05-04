@@ -17,13 +17,24 @@ class ReferrersController extends BaseAnalyticsController
     {
         $this->ownedDomain($request, $domain);
 
-        $referrers = $this->analytics->topReferrers(
+        $current = $this->analytics->topReferrers(
             $domain->id,
             $request->start(),
             $request->end(),
             $request->limit(),
         );
 
-        return $this->success($referrers);
+        if (!$request->compare()) {
+            return $this->success($current);
+        }
+
+        $prev = $this->analytics->topReferrers(
+            $domain->id,
+            $request->prevStart(),
+            $request->prevEnd(),
+            $request->limit(),
+        );
+
+        return $this->success(['current' => $current, 'prev' => $prev]);
     }
 }
