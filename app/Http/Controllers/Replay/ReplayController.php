@@ -71,12 +71,25 @@ class ReplayController extends Controller
         ");
 
         // Decode the stored JSON data field and extract event structure
-        // CRITICAL FIX: Return proper rrweb event format with type, data, timestamp
+        // The stored data already contains the complete rrweb event structure:
+        // {type: N, data: {...}, timestamp: N}
+        // We must return it as-is for the replayer to work correctly.
+        // For FullSnapshot events (type 2), the data field contains the entire DOM tree.
         $events = array_map(function (array $row) {
             $fullEvent = json_decode((string) ($row['data'] ?? '{}'), true) ?? [];
+
+            // The stored event already has the correct structure: {type, data, timestamp}
+            // Return the data field directly. For FullSnapshot, this contains the node tree.
+            // If data is empty but we have a node at the top level, use the full event as data.
+            $eventData = $fullEvent['data'] ?? [];
+            if (empty($eventData) && isset($fullEvent['node'])) {
+                // Fallback: the entire event might be stored as the data
+                $eventData = $fullEvent;
+            }
+
             return [
                 'type' => (int) ($fullEvent['type'] ?? $row['type'] ?? 0),
-                'data' => $fullEvent['data'] ?? [],
+                'data' => $eventData,
                 'timestamp' => (int) ($fullEvent['timestamp'] ?? $row['timestamp'] ?? 0),
             ];
         }, $rows);

@@ -44,11 +44,11 @@ class ReplayIngestController extends Controller
             return response('', 401, self::CORS);
         }
 
-        $sessionId = $this->sanitizeUuid($body['sid'] ?? null);
-        $visitorId = $this->sanitizeUuid($body['vid'] ?? null);
+        $sessionId = $this->sanitizeUuid($body['sid'] ?? null, false);
+        $visitorId = $this->sanitizeUuid($body['vid'] ?? null, true);
         $events = is_array($body['events'] ?? null) ? $body['events'] : [];
 
-        if (empty($events)) {
+        if (empty($events) || $sessionId === '') {
             return response('', 204, self::CORS);
         }
 
@@ -132,11 +132,13 @@ class ReplayIngestController extends Controller
         return response('', 204, self::CORS);
     }
 
-    private function sanitizeUuid(mixed $value): string
+    private function sanitizeUuid(mixed $value, bool $allowGenerate): string
     {
         $str = (string) ($value ?? '');
-        return preg_match('/^[a-f0-9\-]{8,64}$/i', $str)
-            ? $str
-            : Str::uuid()->toString();
+        if (preg_match('/^[a-f0-9\-]{8,64}$/i', $str)) {
+            return $str;
+        }
+
+        return $allowGenerate ? Str::uuid()->toString() : '';
     }
 }

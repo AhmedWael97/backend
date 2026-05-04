@@ -33,6 +33,7 @@ use App\Http\Controllers\Tracker\TrackController;
 use App\Http\Controllers\Ux\UxScoreController;
 use App\Http\Controllers\Ux\UxIssuesController;
 use App\Http\Controllers\Ux\UxHeatmapController;
+use App\Http\Controllers\Ux\UxHeatmapScreenshotController;
 use App\Http\Controllers\Ux\UxErrorsController;
 use App\Http\Controllers\Ux\UxScrollDepthController;
 use App\Http\Controllers\Ux\UxWebVitalsController;
@@ -93,7 +94,7 @@ Route::prefix('v1')->middleware('api.key')->group(function () {
     */
     Route::post('track', TrackController::class)->name('track')->middleware('throttle:300,1');
     Route::post('track/optout', OptoutController::class)->name('track.optout');
-    Route::post('track/replay', ReplayIngestController::class)->name('track.replay')->middleware('throttle:120,1');
+    Route::post('track/replay', ReplayIngestController::class)->name('track.replay')->middleware('throttle:600,1');
     // CORS preflight for all tracker sub-paths
     Route::options('track', CorsPreflightController::class);
     Route::options('track/replay', CorsPreflightController::class);
@@ -101,7 +102,7 @@ Route::prefix('v1')->middleware('api.key')->group(function () {
     // Alias: /collect/* → same controllers (supports trackers installed with data-api ending in /collect)
     Route::post('collect', TrackController::class)->middleware('throttle:300,1');
     Route::post('collect/optout', OptoutController::class);
-    Route::post('collect/replay', ReplayIngestController::class)->middleware('throttle:120,1');
+    Route::post('collect/replay', ReplayIngestController::class)->middleware('throttle:600,1');
     Route::options('collect', CorsPreflightController::class);
     Route::options('collect/replay', CorsPreflightController::class);
     Route::options('collect/optout', CorsPreflightController::class);
@@ -366,6 +367,7 @@ Route::prefix('v1')->middleware('api.key')->group(function () {
             Route::get('score', UxScoreController::class)->name('score');
             Route::get('issues', UxIssuesController::class)->name('issues');
             Route::get('heatmap', UxHeatmapController::class)->name('heatmap');
+            Route::get('heatmap/screenshot', UxHeatmapScreenshotController::class)->name('heatmap.screenshot');
             Route::get('errors', UxErrorsController::class)->name('errors');
             Route::get('scroll-depth', UxScrollDepthController::class)->name('scroll-depth');
             Route::get('web-vitals', UxWebVitalsController::class)->name('web-vitals');

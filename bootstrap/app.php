@@ -27,6 +27,11 @@ return Application::configure(basePath: dirname(__DIR__))
     })
     ->withExceptions(function (Exceptions $exceptions): void {
 
+
+        $exceptions->shouldRenderJsonWhen(function (Request $request, \Throwable $e): bool {
+            return $request->is('api/*') || $request->expectsJson();
+        });
+
         $apiResponse = function (int $statusCode, string $message, mixed $errors = null) {
             $payload = ['message' => $message];
             if ($errors !== null) {
@@ -46,22 +51,22 @@ return Application::configure(basePath: dirname(__DIR__))
         });
 
         $exceptions->render(function (AuthenticationException $e, Request $request) use ($apiResponse) {
-            if ($request->is('api/*')) {
-                return $apiResponse(401, 'Unauthenticated.');
-            }
+            return $apiResponse(401, 'Unauthenticated.', null);
         });
 
         $exceptions->render(function (HttpException $e, Request $request) use ($apiResponse) {
             if ($request->is('api/*')) {
-                return $apiResponse($e->getStatusCode(), $e->getMessage() ?: 'HTTP error.');
+                return $apiResponse($e->getStatusCode(), $e->getMessage() ?: 'HTTP error.', null);
             }
         });
 
         $exceptions->render(function (Throwable $e, Request $request) use ($apiResponse) {
             if ($request->is('api/*')) {
                 $statusCode = 500;
-                $message = config('app.debug') ? $e->getMessage() . ' [' . get_class($e) . ']' : 'Server error.';
-                return $apiResponse($statusCode, $message);
+                $message = config('app.debug')
+                    ? $e->getMessage() . ' [' . get_class($e) . ']'
+                    : 'Server error.';
+                return $apiResponse($statusCode, $message, null);
             }
         });
 
