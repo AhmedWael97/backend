@@ -130,6 +130,18 @@ class ProcessTrackingEvent implements ShouldQueue
             }
         }
 
+        // Update session duration when the visitor navigates away (time_on_page event).
+        // The tracker sends { e: 'time_on_page', d: <seconds> }; TrackController maps d → duration.
+        if ($row['type'] === 'time_on_page' && $row['duration'] > 0) {
+            $dur = (int) $row['duration'];
+            $sid = (string) $row['session_id'];
+            $did = (int) $row['domain_id'];
+            $clickhouse->statement(
+                "ALTER TABLE sessions UPDATE duration_seconds = duration_seconds + {$dur}"
+                . " WHERE session_id = '{$sid}' AND domain_id = {$did}"
+            );
+        }
+
         // Match pageview URL against pipeline steps and write to pipeline_events
         if ($row['type'] === 'pageview' && !empty($row['url'])) {
             $this->matchPipelineSteps($clickhouse, $row);

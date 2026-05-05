@@ -45,22 +45,35 @@ class EngagedVisitorsController extends Controller
         $domainId = (int) $domain->id;
 
         // ── Base session aggregation per visitor ──────────────────────────────
+        // Join sessions (for demographics + session list) with a per-session events
+        // aggregate so that avg_duration and avg_pages are derived from live event
+        // data instead of the sessions table's async-mutated columns.
         $sessionMetrics = $this->ch->select("
             SELECT
-                visitor_id,
-                count()                                 AS total_sessions,
-                round(avg(duration_seconds))            AS avg_duration,
-                round(avg(page_count), 1)               AS avg_pages,
-                max(started_at)                         AS last_seen,
-                min(started_at)                         AS first_seen,
-                any(country)                            AS country,
-                any(device)                             AS device_type,
-                any(browser)                            AS browser,
-                any(company_name)                       AS company
-            FROM sessions
-            WHERE domain_id = {$domainId}
-              AND started_at BETWEEN '{$startDt}' AND '{$endDt}'
-            GROUP BY visitor_id
+                s.visitor_id                              AS visitor_id,
+                count()                                   AS total_sessions,
+                round(avg(COALESCE(toFloat64(e.session_dur), 0))) AS avg_duration,
+                round(avg(COALESCE(toFloat64(e.pv_count), 1)), 1) AS avg_pages,
+                max(s.started_at)                         AS last_seen,
+                min(s.started_at)                         AS first_seen,
+                any(s.country)                            AS country,
+                any(s.device)                             AS device_type,
+                any(s.browser)                            AS browser,
+                any(s.company_name)                       AS company
+            FROM sessions AS s
+            LEFT JOIN (
+                SELECT
+                    session_id,
+                    countIf(type = 'pageview')             AS pv_count,
+                    sumIf(duration, type = 'time_on_page') AS session_dur
+                FROM events
+                WHERE domain_id = {$domainId}
+                  AND ts BETWEEN '{$startDt}' AND '{$endDt}'
+                GROUP BY session_id
+            ) AS e ON s.session_id = e.session_id
+            WHERE s.domain_id = {$domainId}
+              AND s.started_at BETWEEN '{$startDt}' AND '{$endDt}'
+            GROUP BY s.visitor_id
         ");
 
         if (empty($sessionMetrics)) {

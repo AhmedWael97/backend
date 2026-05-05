@@ -37,25 +37,41 @@ class CampaignsController extends Controller
         $domainId = (int) $domain->id;
 
         // ── Campaign table ────────────────────────────────────────────────────
-        $goalClause = $goal
-            ? "countIf(exit_url LIKE '%" . addslashes($goal) . "%') AS conversions,"
-            : '0 AS conversions,';
+        // Derive bounce_rate, avg_pages, and avg_duration from the events table so
+        // they are accurate even before ClickHouse ALTER TABLE mutations are applied.
+        $safeGoal = $goal ? str_replace(["\\", "'"], ["\\\\", "\\'"], $goal) : '';
+        $goalSubClause = $goal
+            ? "maxIf(1, type = 'pageview' AND url LIKE '%{$safeGoal}%') AS has_goal,"
+            : '0 AS has_goal,';
 
         $rows = $this->ch->select("
             SELECT
-                if(utm_source = '', '(direct)', utm_source)   AS source,
-                if(utm_medium = '', '(none)', utm_medium)     AS medium,
-                if(utm_campaign = '', '(none)', utm_campaign) AS campaign,
-                count()                                        AS sessions,
-                uniq(visitor_id)                               AS visitors,
-                round(avg(duration_seconds))                   AS avg_duration,
-                round(avg(page_count), 1)                      AS avg_pages,
-                round(countIf(page_count = 1) / count() * 100, 1) AS bounce_rate,
-                {$goalClause}
-                max(started_at) AS last_seen
-            FROM sessions
-            WHERE domain_id = {$domainId}
-              AND started_at BETWEEN '{$startDt}' AND '{$endDt}'
+                if(utm_source = '', '(direct)', utm_source)                       AS source,
+                if(utm_medium = '', '(none)', utm_medium)                         AS medium,
+                if(utm_campaign = '', '(none)', utm_campaign)                     AS campaign,
+                uniq(session_id)                                                  AS sessions,
+                uniq(visitor_id)                                                  AS visitors,
+                round(avg(tot_duration))                                          AS avg_duration,
+                round(avg(pv_count), 1)                                           AS avg_pages,
+                round(toFloat64(countIf(pv_count = 1)) / uniq(session_id) * 100, 1) AS bounce_rate,
+                countIf(has_goal = 1)                                             AS conversions,
+                max(last_ts)                                                      AS last_seen
+            FROM (
+                SELECT
+                    session_id,
+                    visitor_id,
+                    anyIf(utm_source,   utm_source   != '') AS utm_source,
+                    anyIf(utm_medium,   utm_medium   != '') AS utm_medium,
+                    anyIf(utm_campaign, utm_campaign != '') AS utm_campaign,
+                    countIf(type = 'pageview')              AS pv_count,
+                    sumIf(duration, type = 'time_on_page')  AS tot_duration,
+                    max(ts)                                 AS last_ts,
+                    {$goalSubClause}
+                FROM events
+                WHERE domain_id = {$domainId}
+                  AND ts BETWEEN '{$startDt}' AND '{$endDt}'
+                GROUP BY session_id, visitor_id
+            )
             GROUP BY source, medium, campaign
             ORDER BY sessions DESC
             LIMIT 200
