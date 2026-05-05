@@ -384,12 +384,14 @@ Route::prefix('v1')->middleware('api.key')->group(function () {
         Route::prefix('ai/{domainId}')->name('ai.')->group(function () {
             Route::get('segments', [AiController::class, 'segments'])->name('segments');
             Route::get('suggestions', [AiController::class, 'suggestions'])->name('suggestions');
+            Route::get('report', [AiController::class, 'report'])->name('report');
             Route::post('analyze', [AiController::class, 'analyze'])->name('analyze');
             Route::get('quota', [AiController::class, 'quotaStatus'])->name('quota');
-            Route::post('chat', [AiController::class, 'chat'])->name('chat'); // Phase 2 stub
         });
         Route::patch('ai/suggestions/{id}/dismiss', [AiController::class, 'dismissSuggestion'])
             ->name('ai.suggestions.dismiss');
+        Route::get('ai/token-packs', [AiController::class, 'tokenPacks'])->name('ai.token-packs');
+        Route::post('ai/tokens/purchase', [AiController::class, 'purchaseTokens'])->name('ai.tokens.purchase');
 
         /*
         |--------------------------------------------------------------------------
@@ -442,6 +444,7 @@ Route::prefix('v1')->middleware('api.key')->group(function () {
             Route::post('{id}/verify-email', [AdminUserController::class, 'verifyEmail'])->name('verify-email');
             Route::post('{id}/disable-2fa', [AdminUserController::class, 'disable2fa'])->name('disable-2fa');
             Route::post('{id}/toggle-admin', [AdminUserController::class, 'toggleAdmin'])->name('toggle-admin');
+            Route::post('{id}/grant-tokens', [AdminUserController::class, 'grantTokens'])->name('grant-tokens');
             Route::delete('{id}', [AdminUserController::class, 'destroy'])->name('destroy');
             Route::post('{id}/subscriptions', [AdminSubscriptionController::class, 'assign'])->name('subscriptions.assign');
         });
@@ -473,6 +476,7 @@ Route::prefix('v1')->middleware('api.key')->group(function () {
             Route::post('{id}/cancel', [AdminSubscriptionController::class, 'cancel'])->name('cancel');
             Route::post('{id}/pause', [AdminSubscriptionController::class, 'pause'])->name('pause');
             Route::post('{id}/resume', [AdminSubscriptionController::class, 'resume'])->name('resume');
+            Route::post('{id}/extend', [AdminSubscriptionController::class, 'extend'])->name('extend');
         });
 
         // Payments

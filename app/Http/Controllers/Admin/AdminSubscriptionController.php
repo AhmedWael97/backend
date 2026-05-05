@@ -70,6 +70,26 @@ class AdminSubscriptionController extends Controller
     }
 
     /**
+     * POST /api/admin/subscriptions/{id}/extend — add days to period_end.
+     */
+    public function extend(Request $request, int $id): JsonResponse
+    {
+        $sub = Subscription::findOrFail($id);
+        $data = $request->validate([
+            'days' => ['required', 'integer', 'min:1', 'max:3650'],
+        ]);
+
+        $base = $sub->current_period_end ?? now();
+        $newEnd = $base->copy()->addDays($data['days']);
+
+        $before = ['current_period_end' => $sub->current_period_end?->toIso8601String()];
+        $sub->update(['current_period_end' => $newEnd, 'status' => 'active']);
+        $this->auditLog($request, 'subscription.extend', 'Subscription', $id, $before, ['days' => $data['days'], 'new_end' => $newEnd->toIso8601String()]);
+
+        return $this->success(['message' => "Subscription extended by {$data['days']} days.", 'data' => $sub->fresh()]);
+    }
+
+    /**
      * POST /api/admin/users/{id}/subscriptions — manually assign plan.
      */
     public function assign(Request $request, int $userId): JsonResponse

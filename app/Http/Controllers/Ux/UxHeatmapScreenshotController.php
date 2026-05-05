@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Domain;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Storage;
 
@@ -13,7 +14,7 @@ class UxHeatmapScreenshotController extends Controller
 {
     private const CACHE_DIR = 'heatmap-screenshots';
 
-    public function __invoke(Request $request, int $domainId): JsonResponse
+    public function __invoke(Request $request, int $domainId): JsonResponse|Response
     {
         $domain = Domain::where('id', $domainId)
             ->where('user_id', $request->user()->id)
@@ -43,12 +44,12 @@ class UxHeatmapScreenshotController extends Controller
         $cacheTtl = (int) env('HEATMAP_SCREENSHOT_TTL_SECONDS', 60 * 60 * 24);
         $cacheKey = sha1($domain->id . '|' . $url);
         $cachePath = self::CACHE_DIR . '/' . $domain->id . '/' . $this->buildCacheFileName($url, $cacheKey);
-        $disk = Storage::disk('public');
+        $disk = Storage::disk('local');
 
         if ($disk->exists($cachePath)) {
             $age = time() - (int) $disk->lastModified($cachePath);
             if ($age >= 0 && $age <= $cacheTtl) {
-                return $this->screenshotResponse($this->publicUrl($cachePath), 'hit');
+                return $this->screenshotResponse((string) $disk->get($cachePath), 'hit');
             }
         }
 
@@ -66,7 +67,7 @@ class UxHeatmapScreenshotController extends Controller
 
         if (!$response->successful()) {
             if ($disk->exists($cachePath)) {
-                return $this->screenshotResponse($this->publicUrl($cachePath), 'stale');
+                return $this->screenshotResponse((string) $disk->get($cachePath), 'stale');
             }
 
             $payload = $response->json();
@@ -94,7 +95,7 @@ class UxHeatmapScreenshotController extends Controller
             // Best effort cache write; do not fail the request.
         }
 
-        return $this->screenshotResponse($this->publicUrl($cachePath), 'miss');
+        return $this->screenshotResponse($body, 'miss');
     }
 
     private function buildCacheFileName(string $url, string $cacheKey): string
@@ -106,15 +107,12 @@ class UxHeatmapScreenshotController extends Controller
         return $name . '-' . substr($cacheKey, 0, 12) . '.png';
     }
 
-    private function publicUrl(string $cachePath): string
+    private function screenshotResponse(string $imageData, string $cacheStatus): Response
     {
-        return rtrim((string) config('filesystems.disks.public.url'), '/') . '/' . ltrim($cachePath, '/');
-    }
-
-    private function screenshotResponse(string $imageUrl, string $cacheStatus): JsonResponse
-    {
-        return response()->json([
-            'url' => $imageUrl,
-        ])->header('X-Screenshot-Cache', $cacheStatus);
+        return response($imageData, 200, [
+            'Content-Type' => 'image/png',
+            'Cache-Control' => 'private, max-age=3600',
+            'X-Screenshot-Cache' => $cacheStatus,
+        ]);
     }
 }

@@ -28,6 +28,8 @@ class User extends Authenticatable implements MustVerifyEmail
         'totp_secret',
         'totp_enabled',
         'totp_last_used_at',
+        'ai_tokens',
+        'ai_free_used',
     ];
 
     protected $hidden = [
@@ -44,6 +46,8 @@ class User extends Authenticatable implements MustVerifyEmail
             'totp_last_used_at' => 'datetime',
             'password' => 'hashed',
             'totp_enabled' => 'boolean',
+            'ai_free_used' => 'boolean',
+            'ai_tokens' => 'integer',
             'onboarding' => 'array',
         ];
     }

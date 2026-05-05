@@ -201,6 +201,38 @@ class AdminUserController extends Controller
         return $this->success(['message' => 'User deleted.']);
     }
 
+    /**
+     * POST /api/admin/users/{id}/grant-tokens
+     * Body: { tokens: int, note?: string }
+     * Grants AI analysis tokens to a user.
+     */
+    public function grantTokens(Request $request, int $id): JsonResponse
+    {
+        $user = User::findOrFail($id);
+        $data = $request->validate([
+            'tokens' => ['required', 'integer', 'min:1', 'max:10000'],
+            'note' => ['sometimes', 'string', 'max:500'],
+        ]);
+
+        $before = ['ai_tokens' => $user->ai_tokens];
+        $user->increment('ai_tokens', $data['tokens']);
+        $user->refresh();
+
+        $this->auditLog(
+            $request,
+            'user.grant_ai_tokens',
+            'User',
+            $id,
+            $before,
+            ['ai_tokens' => $user->ai_tokens, 'granted' => $data['tokens'], 'note' => $data['note'] ?? null]
+        );
+
+        return $this->success([
+            'message' => "Granted {$data['tokens']} AI tokens to {$user->name}.",
+            'ai_tokens' => $user->ai_tokens,
+        ]);
+    }
+
     private function auditLog(Request $request, string $action, string $type, int $id, array $before = [], array $after = []): void
     {
         AuditLog::create([
