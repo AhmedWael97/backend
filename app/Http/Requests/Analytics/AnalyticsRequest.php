@@ -19,7 +19,7 @@ class AnalyticsRequest extends FormRequest
             'end' => ['nullable', 'date'],
             'granularity' => ['nullable', 'in:hour,day,week,month'],
             'limit' => ['nullable', 'integer', 'min:1', 'max:100'],
-            'compare' => ['nullable', 'boolean'],
+            'compare' => ['nullable', 'in:0,1,true,false'],
         ];
     }
 
