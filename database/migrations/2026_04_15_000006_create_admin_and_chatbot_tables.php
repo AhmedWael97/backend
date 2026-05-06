@@ -14,6 +14,7 @@ return new class extends Migration {
                 'user.block',
                 'user.unblock',
                 'user.edit',
+                'user.grant_ai_tokens',
                 'impersonate.start',
                 'impersonate.end',
                 'plan.create',
