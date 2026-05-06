@@ -41,8 +41,8 @@ class CampaignsController extends Controller
         // they are accurate even before ClickHouse ALTER TABLE mutations are applied.
         $safeGoal = $goal ? str_replace(["\\", "'"], ["\\\\", "\\'"], $goal) : '';
         $goalSubClause = $goal
-            ? "maxIf(1, type = 'pageview' AND url LIKE '%{$safeGoal}%') AS has_goal,"
-            : '0 AS has_goal,';
+            ? "maxIf(1, type = 'pageview' AND url LIKE '%{$safeGoal}%') AS has_goal"
+            : '0 AS has_goal';
 
         $rows = $this->ch->select("
             SELECT
