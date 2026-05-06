@@ -41,6 +41,7 @@ use App\Http\Controllers\Ux\UxWebVitalsController;
 use App\Http\Controllers\Replay\ReplayIngestController;
 use App\Http\Controllers\Replay\ReplayController;
 use App\Http\Controllers\Ai\AiController;
+use App\Http\Controllers\Ai\ChatbotController;
 use App\Http\Controllers\Admin\AdminAuditLogController;
 use App\Http\Controllers\Admin\AdminDomainController;
 use App\Http\Controllers\Admin\AdminPaymentController;
@@ -411,15 +412,15 @@ Route::prefix('v1')->middleware('api.key')->group(function () {
 
         /*
         |--------------------------------------------------------------------------
-        | Website Chatbot stubs (Phase 2)
+        | AI Assistant Chatbot
         |--------------------------------------------------------------------------
         */
         Route::prefix('chatbot/{domainId}')->name('chatbot.')->group(function () {
-            Route::get('config', fn() => response()->json(['feature' => 'disabled', 'phase' => 2], 503));
-            Route::put('config', fn() => response()->json(['feature' => 'disabled', 'phase' => 2], 503));
-            Route::get('conversations', fn() => response()->json(['feature' => 'disabled', 'phase' => 2], 503));
-            Route::get('conversations/{id}', fn() => response()->json(['feature' => 'disabled', 'phase' => 2], 503));
-            Route::delete('chat/{sessionId}', fn() => response()->json(['feature' => 'disabled', 'phase' => 2], 503));
+            Route::get('sessions', [ChatbotController::class, 'sessions'])->name('sessions');
+            Route::post('sessions', [ChatbotController::class, 'startSession'])->name('sessions.start');
+            Route::get('sessions/{sessionId}', [ChatbotController::class, 'showSession'])->name('sessions.show');
+            Route::post('sessions/{sessionId}/message', [ChatbotController::class, 'sendMessage'])->name('sessions.message');
+            Route::delete('sessions/{sessionId}', [ChatbotController::class, 'deleteSession'])->name('sessions.delete');
         });
     });
 
