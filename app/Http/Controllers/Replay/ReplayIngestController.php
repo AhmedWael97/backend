@@ -28,7 +28,15 @@ class ReplayIngestController extends Controller
 
     public function __invoke(Request $request, ClickHouseService $clickhouse): Response
     {
-        $body = $request->json()->all();
+        // sendBeacon sends Content-Type: text/plain to avoid CORS preflights.
+        // Parse the raw body as JSON when the content type is not application/json.
+        $contentType = strtolower($request->header('Content-Type', ''));
+        if (str_contains($contentType, 'application/json')) {
+            $body = $request->json()->all();
+        } else {
+            $body = json_decode($request->getContent(), true) ?? [];
+        }
+
         $token = $body['t'] ?? $body['token'] ?? $request->header('X-Eye-Token');
 
         if (!$token) {

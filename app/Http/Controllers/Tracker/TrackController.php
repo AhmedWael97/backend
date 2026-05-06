@@ -49,7 +49,11 @@ class TrackController extends Controller
             'Access-Control-Allow-Headers' => 'Content-Type, X-Eye-Token',
         ];
 
-        $body = $request->json()->all();
+        // sendBeacon sends Content-Type: text/plain to avoid CORS preflights.
+        $contentType = strtolower($request->header('Content-Type', ''));
+        $body = str_contains($contentType, 'application/json')
+            ? $request->json()->all()
+            : (json_decode($request->getContent(), true) ?? []);
 
         // Support both a single event object and a batch array
         $events = isset($body[0]) ? $body : [$body];
