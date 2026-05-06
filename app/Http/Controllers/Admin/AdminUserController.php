@@ -40,8 +40,7 @@ class AdminUserController extends Controller
 
     public function index(Request $request): JsonResponse
     {
-        $query = User::where('role', 'user')
-            ->with(['subscription.plan']);
+        $query = User::with(['subscription.plan']);
 
         if ($search = $request->query('search')) {
             $query->where(fn($q) => $q->where('name', 'like', "%{$search}%")->orWhere('email', 'like', "%{$search}%"));
