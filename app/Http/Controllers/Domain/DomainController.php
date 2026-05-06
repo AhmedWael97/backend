@@ -46,6 +46,13 @@ class DomainController extends Controller
             'active' => true,
         ]);
 
+        // Mark onboarding step
+        if (empty($user->onboarding['domain_added'])) {
+            $onboarding = $user->onboarding ?? [];
+            $onboarding['domain_added'] = true;
+            $user->update(['onboarding' => $onboarding]);
+        }
+
         return $this->success((new DomainResource($domain))->resolve(), 201);
     }
 

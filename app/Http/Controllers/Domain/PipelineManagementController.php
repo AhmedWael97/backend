@@ -40,6 +40,14 @@ class PipelineManagementController extends Controller
             $pipeline->steps()->create($step);
         }
 
+        // Mark onboarding step for the domain owner
+        $owner = $domain->user;
+        if ($owner && empty($owner->onboarding['funnel_created'])) {
+            $onboarding = $owner->onboarding ?? [];
+            $onboarding['funnel_created'] = true;
+            $owner->update(['onboarding' => $onboarding]);
+        }
+
         return $this->success($pipeline->load('steps'), 201);
     }
 
