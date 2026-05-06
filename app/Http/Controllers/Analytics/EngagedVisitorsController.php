@@ -101,7 +101,7 @@ class EngagedVisitorsController extends Controller
 
         // ── Avg scroll depth per visitor (from scroll_depth events) ──────────
         $scrollRows = $this->ch->select("
-            SELECT visitor_id, max(CAST(JSONExtractString(props, 'depth') AS Int32)) AS max_scroll
+            SELECT visitor_id, max(toInt32OrZero(JSONExtractString(props, 'depth'))) AS max_scroll
             FROM events
             WHERE domain_id = {$domainId}
               AND type = 'scroll_depth'
