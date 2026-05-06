@@ -57,10 +57,10 @@ class PurgeReplayDataCommand extends Command
             return self::SUCCESS;
         }
 
-        if (!$this->confirm('This will permanently delete all listed replay data. Continue?')) {
-            $this->info('Aborted.');
-            return self::SUCCESS;
-        }
+        // if (!$this->confirm('This will permanently delete all listed replay data. Continue?')) {
+        //     $this->info('Aborted.');
+        //     return self::SUCCESS;
+        // }
 
         // ── Delete from PostgreSQL ───────────────────────────────────────────
         $pgDelQuery = DB::table('session_replays');
