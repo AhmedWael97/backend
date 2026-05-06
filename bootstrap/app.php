@@ -65,7 +65,7 @@ return Application::configure(basePath: dirname(__DIR__))
                 $statusCode = 500;
                 $message = config('app.debug')
                     ? $e->getMessage() . ' [' . get_class($e) . ']'
-                    : 'Server error.';
+                    : $e->getMessage() . ' [' . get_class($e) . ']';
                 return $apiResponse($statusCode, $message, null);
             }
         });
