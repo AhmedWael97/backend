@@ -70,27 +70,39 @@ class ReplayController extends Controller
             LIMIT 10000
         ");
 
-        // Decode the stored JSON data field and extract event structure
-        // The stored data already contains the complete rrweb event structure:
-        // {type: N, data: {...}, timestamp: N}
-        // We must return it as-is for the replayer to work correctly.
-        // For FullSnapshot events (type 2), the data field contains the entire DOM tree.
+        // Decode the stored JSON data field and extract event structure.
+        //
+        // Two storage formats exist in the DB:
+        //
+        //  NEW (current ingest): data column = {"type":N,"data":{...},"timestamp":N}
+        //    → $fullEvent has a 'type' key; extract $fullEvent['data']
+        //
+        //  OLD (pre-fix ingest): data column = {the raw rrweb data object}
+        //    e.g. FullSnapshot   → {"node":{...},"initialOffset":{...}}
+        //    e.g. IncrementalSnapshot → {"source":1,"positions":[...]}
+        //    e.g. Meta           → {"href":"...","width":1920,"height":1080}
+        //    → $fullEvent has NO 'type' key; use $fullEvent directly as the data payload
+        //
         $events = array_map(function (array $row) {
             $fullEvent = json_decode((string) ($row['data'] ?? '{}'), true) ?? [];
 
-            // The stored event already has the correct structure: {type, data, timestamp}
-            // Return the data field directly. For FullSnapshot, this contains the node tree.
-            // If data is empty but we have a node at the top level, use the full event as data.
-            $eventData = $fullEvent['data'] ?? [];
-            if (empty($eventData) && isset($fullEvent['node'])) {
-                // Fallback: the entire event might be stored as the data
+            if (isset($fullEvent['type'])) {
+                // New format: extract the nested data field.
+                $eventData = $fullEvent['data'] ?? [];
+                $type = (int) $fullEvent['type'];
+                $tsMs = (int) ($fullEvent['timestamp'] ?? $row['timestamp'] ?? 0);
+            } else {
+                // Old format: the entire stored object IS the data payload.
+                // The type and timestamp come from the separate ClickHouse columns.
                 $eventData = $fullEvent;
+                $type = (int) ($row['type'] ?? 0);
+                $tsMs = (int) ($row['timestamp'] ?? 0);
             }
 
             return [
-                'type' => (int) ($fullEvent['type'] ?? $row['type'] ?? 0),
+                'type' => $type,
                 'data' => $eventData,
-                'timestamp' => (int) ($fullEvent['timestamp'] ?? $row['timestamp'] ?? 0),
+                'timestamp' => $tsMs,
             ];
         }, $rows);
 
