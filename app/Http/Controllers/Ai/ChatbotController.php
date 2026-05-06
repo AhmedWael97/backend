@@ -255,11 +255,11 @@ class ChatbotController extends Controller
 
         // Device split
         $devices = $this->ch->select("
-            SELECT device, uniq(visitor_id) AS visitors
+            SELECT device_type, uniq(visitor_id) AS visitors
             FROM events
-            WHERE domain_id={$domainId} AND device != ''
+            WHERE domain_id={$domainId} AND device_type != ''
               AND ts>='{$start}' AND ts<'{$end}'
-            GROUP BY device ORDER BY visitors DESC
+            GROUP BY device_type ORDER BY visitors DESC
         ");
 
         // Weekly trend — last 4 weeks vs previous 4 weeks
@@ -295,7 +295,7 @@ class ChatbotController extends Controller
             'top_pages' => array_map(fn($r) => ['url' => $r['url'], 'pageviews' => (int) $r['pv']], $topPages),
             'top_countries' => array_map(fn($r) => ['country' => $r['country'], 'visitors' => (int) $r['visitors']], $topCountries),
             'top_referrers' => array_map(fn($r) => ['referrer' => $r['referrer'], 'hits' => (int) $r['hits']], $topReferrers),
-            'devices' => array_map(fn($r) => ['device' => $r['device'], 'visitors' => (int) $r['visitors']], $devices),
+            'devices' => array_map(fn($r) => ['device' => $r['device_type'], 'visitors' => (int) $r['visitors']], $devices),
         ];
     }
 
