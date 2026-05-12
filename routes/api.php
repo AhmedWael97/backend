@@ -39,6 +39,7 @@ use App\Http\Controllers\Ux\UxHeatmapScreenshotController;
 use App\Http\Controllers\Ux\UxErrorsController;
 use App\Http\Controllers\Ux\UxScrollDepthController;
 use App\Http\Controllers\Ux\UxWebVitalsController;
+use App\Http\Controllers\Ux\UxPerformanceController;
 use App\Http\Controllers\Replay\ReplayIngestController;
 use App\Http\Controllers\Replay\ReplayController;
 use App\Http\Controllers\Ai\AiController;
@@ -391,6 +392,7 @@ Route::prefix('v1')->middleware('api.key')->group(function () {
             Route::get('errors', UxErrorsController::class)->name('errors');
             Route::get('scroll-depth', UxScrollDepthController::class)->name('scroll-depth');
             Route::get('web-vitals', UxWebVitalsController::class)->name('web-vitals');
+            Route::get('performance', UxPerformanceController::class)->name('performance');
         });
 
         /*
