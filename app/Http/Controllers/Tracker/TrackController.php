@@ -215,6 +215,7 @@ class TrackController extends Controller
             'quick_back',
             'slow_resources',
             'page_load',
+            'pipeline_step',
         ];
         $str = strtolower(trim((string) ($value ?? 'pageview')));
         return in_array($str, $allowed, true) ? $str : 'custom';

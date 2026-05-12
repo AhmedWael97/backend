@@ -166,15 +166,16 @@ class ProcessTrackingEvent implements ShouldQueue
             ]);
         }
 
-        // Handle identify events — upsert visitor_identities
-        if ($row['type'] === 'identify' && !empty($p['props']['uid'])) {
+        // Handle identify events — upsert visitor_identities.
+        // The tracker sends { eid: externalId, p: traits } — external ID is under 'eid'.
+        if ($row['type'] === 'identify' && !empty($p['props']['eid'])) {
             VisitorIdentity::updateOrCreate(
                 [
                     'domain_id' => $row['domain_id'],
                     'visitor_id' => $row['visitor_id'],
                 ],
                 [
-                    'external_id' => substr((string) $p['props']['uid'], 0, 255),
+                    'external_id' => substr((string) $p['props']['eid'], 0, 255),
                     'traits' => $p['props'],
                     'first_identified_at' => now(),
                     'updated_at' => now(),
