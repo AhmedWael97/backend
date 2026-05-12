@@ -358,6 +358,8 @@ class ProcessTrackingEvent implements ShouldQueue
             'time_on_page',
             'excessive_scroll',
             'quick_back',
+            'page_load',
+            'slow_resources',
         ];
 
         $isWebVitals = $type === 'custom' && (($payload['custom_name'] ?? null) === 'web_vitals');
