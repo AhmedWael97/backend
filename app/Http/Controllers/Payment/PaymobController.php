@@ -57,9 +57,9 @@ class PaymobController extends Controller
 
         $dbConfig = $paymobMethod->config ?? [];
 
-        $apiKey        = (string) ($dbConfig['api_key']        ?? config('services.paymob.api_key', ''));
-        $integrationId = (int)    ($dbConfig['integration_id'] ?? config('services.paymob.integration_id', 0));
-        $iframeId      = (string) ($dbConfig['iframe_id']      ?? config('services.paymob.iframe_id', ''));
+        $apiKey = (string) ($dbConfig['api_key'] ?? config('services.paymob.api_key', ''));
+        $integrationId = (int) ($dbConfig['integration_id'] ?? config('services.paymob.integration_id', 0));
+        $iframeId = (string) ($dbConfig['iframe_id'] ?? config('services.paymob.iframe_id', ''));
 
         if (!$apiKey || !$integrationId || !$iframeId) {
             return $this->error('Paymob is not fully configured. Please contact support.', 503);
