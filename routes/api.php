@@ -44,6 +44,7 @@ use App\Http\Controllers\Replay\ReplayIngestController;
 use App\Http\Controllers\Replay\ReplayController;
 use App\Http\Controllers\Ai\AiController;
 use App\Http\Controllers\Ai\ChatbotController;
+use App\Http\Controllers\Tools\SitemapController;
 use App\Http\Controllers\Admin\AdminAuditLogController;
 use App\Http\Controllers\Admin\AdminDomainController;
 use App\Http\Controllers\Admin\AdminPaymentController;
@@ -95,6 +96,20 @@ Route::prefix('v1')->middleware('api.key')->group(function () {
     Route::post('tools/seo-crawl', [SeoCheckerController::class, 'crawl'])
         ->name('tools.seo-crawl')
         ->middleware(['auth:sanctum', 'throttle:5,1']);
+
+    // Sitemap Creator — AI + analytics enriched sitemap generation
+    Route::middleware(['auth:sanctum'])->prefix('tools/sitemap')->group(function () {
+        Route::post('generate', [SitemapController::class, 'generate'])
+            ->middleware('throttle:3,60')
+            ->name('tools.sitemap.generate');
+        Route::get('history', [SitemapController::class, 'history'])
+            ->name('tools.sitemap.history');
+        Route::get('{job}', [SitemapController::class, 'status'])
+            ->name('tools.sitemap.status');
+        Route::get('{job}/download', [SitemapController::class, 'download'])
+            ->middleware('throttle:20,1')
+            ->name('tools.sitemap.download');
+    });
 
     // Paymob webhook — public endpoint (Paymob server-to-server, HMAC-verified)
     Route::post('billing/paymob/webhook', [PaymobController::class, 'webhook'])
