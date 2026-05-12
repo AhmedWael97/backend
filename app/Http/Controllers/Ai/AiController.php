@@ -64,11 +64,11 @@ class AiController extends Controller
         $reports = AiReport::where('domain_id', $domain->id)
             ->latest('generated_at')
             ->limit(20)
-            ->get(['id', 'type', 'status', 'generated_at', 'created_at'])
+            ->get(['id', 'type', 'generated_at', 'created_at'])
             ->map(fn($r) => [
                 'id' => $r->id,
                 'type' => $r->type ?? 'full_analysis',
-                'status' => $r->status ?? 'completed',
+                'status' => 'completed',
                 'created_at' => $r->created_at,
             ]);
 
