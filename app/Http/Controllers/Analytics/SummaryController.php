@@ -37,10 +37,22 @@ class SummaryController extends Controller
             ->where('user_id', $request->user()->id)
             ->firstOrFail();
 
-        $period = $request->query('period', '30d');
         $did = (int) $domain->id;
 
-        [$start, $end] = $this->parsePeriodDates($period);
+        // Custom date range: if both ?from=YYYY-MM-DD&to=YYYY-MM-DD are provided, use them directly.
+        $fromParam = $request->query('from');
+        $toParam = $request->query('to');
+        if (
+            $fromParam && $toParam
+            && preg_match('/^\d{4}-\d{2}-\d{2}$/', $fromParam)
+            && preg_match('/^\d{4}-\d{2}-\d{2}$/', $toParam)
+        ) {
+            $start = $fromParam;
+            $end = $toParam;
+        } else {
+            $period = $request->query('period', '30d');
+            [$start, $end] = $this->parsePeriodDates($period);
+        }
         [$prevStart, $prevEnd] = $this->prevPeriod($start, $end);
 
         $startDt = $start . ' 00:00:00';
