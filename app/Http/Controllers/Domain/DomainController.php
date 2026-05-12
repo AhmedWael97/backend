@@ -16,11 +16,18 @@ class DomainController extends Controller
 {
     public function index(Request $request): JsonResponse
     {
-        $domains = $request->user()
-            ->domains()
-            ->with('exclusions')
-            ->latest()
-            ->get();
+        $user = $request->user();
+
+        if ($user->isSuperAdmin()) {
+            $domains = Domain::with(['exclusions', 'user:id,name,email'])
+                ->latest()
+                ->get();
+        } else {
+            $domains = $user->domains()
+                ->with('exclusions')
+                ->latest()
+                ->get();
+        }
 
         return $this->success(DomainResource::collection($domains)->resolve());
     }

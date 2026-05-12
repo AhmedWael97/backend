@@ -24,6 +24,8 @@ class DomainResource extends JsonResource
                 'type' => $e->type,
                 'value' => $e->value,
             ])),
+            'owner_name' => $this->whenLoaded('user', fn() => $this->user?->name),
+            'owner_email' => $this->whenLoaded('user', fn() => $this->user?->email),
         ];
     }
 }
