@@ -8,6 +8,7 @@ use App\Http\Controllers\Auth\ProfileController;
 use App\Http\Controllers\Auth\RegisterController;
 use App\Http\Controllers\Auth\TwoFactorController;
 use App\Http\Controllers\Analytics\CompanyController;
+use App\Http\Controllers\Payment\PaymobController;
 use App\Http\Controllers\Analytics\CustomEventsController;
 use App\Http\Controllers\Analytics\CustomEventsStoreController;
 use App\Http\Controllers\Analytics\DevicesController;
@@ -85,9 +86,20 @@ Route::prefix('v1')->middleware('api.key')->group(function () {
     Route::get('theme', [ThemeController::class, 'show'])->name('theme');
 
     // SEO checker — auth required, rate-limited to prevent abuse
-    Route::post('tools/seo-check', SeoCheckerController::class)
+    Route::post('tools/seo-check', [SeoCheckerController::class, 'check'])
         ->name('tools.seo-check')
         ->middleware(['auth:sanctum', 'throttle:20,1']);
+
+    // SEO site crawler — crawls all internal links (up to 20 pages)
+    Route::post('tools/seo-crawl', [SeoCheckerController::class, 'crawl'])
+        ->name('tools.seo-crawl')
+        ->middleware(['auth:sanctum', 'throttle:5,1']);
+
+    // Paymob webhook — public endpoint (Paymob server-to-server, HMAC-verified)
+    Route::post('billing/paymob/webhook', [PaymobController::class, 'webhook'])
+        ->name('billing.paymob.webhook')
+        ->withoutMiddleware('api.key')
+        ->middleware('throttle:60,1');
 
     /*
     |--------------------------------------------------------------------------
@@ -215,6 +227,10 @@ Route::prefix('v1')->middleware('api.key')->group(function () {
             Route::get('/', [BillingController::class, 'show'])->name('show');
             Route::post('subscribe', [BillingController::class, 'subscribe'])->name('subscribe');
             Route::post('cancel', [BillingController::class, 'cancel'])->name('cancel');
+            // Paymob — initiate payment (returns hosted iframe URL)
+            Route::post('paymob/initiate', [PaymobController::class, 'initiate'])
+                ->name('billing.paymob.initiate')
+                ->middleware('throttle:10,1');
         });
 
         // GDPR

@@ -9,7 +9,8 @@ use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Str;
 
 /**
- * POST /api/v1/tools/seo-check
+ * POST /api/v1/tools/seo-check        — single page check
+ * POST /api/v1/tools/seo-crawl        — full-site crawl: follows all internal links
  *
  * Fetches the given URL server-side and runs a suite of SEO checks.
  * Returns categorised issues and an overall score (0-100).
@@ -19,8 +20,11 @@ class SeoCheckerController extends Controller
     private const TIMEOUT = 15;
     private const MAX_BYTES = 2 * 1024 * 1024; // 2 MB cap
     private const UA = 'Mozilla/5.0 (compatible; EyeSEOBot/1.0)';
+    private const MAX_CRAWL_PAGES = 20; // safety limit for full-site crawl
 
-    public function __invoke(Request $request): JsonResponse
+    // ── Single page check ─────────────────────────────────────────────────────
+
+    public function check(Request $request): JsonResponse
     {
         $request->validate([
             'url' => ['required', 'url', 'max:2048'],
@@ -28,13 +32,11 @@ class SeoCheckerController extends Controller
 
         $url = $request->input('url');
 
-        // Security: only allow http/https
         $scheme = strtolower(parse_url($url, PHP_URL_SCHEME) ?? '');
         if (!in_array($scheme, ['http', 'https'], true)) {
             return $this->error('Only http/https URLs are allowed.', 422);
         }
 
-        // Fetch the page
         try {
             $response = Http::withHeaders(['User-Agent' => self::UA])
                 ->timeout(self::TIMEOUT)
@@ -68,6 +70,151 @@ class SeoCheckerController extends Controller
             'issues' => array_values($issues),
             'passing' => array_values($passing),
         ]);
+    }
+
+    // ── Full-site crawl ───────────────────────────────────────────────────────
+
+    public function crawl(Request $request): JsonResponse
+    {
+        $request->validate([
+            'url' => ['required', 'url', 'max:2048'],
+            'max_pages' => ['nullable', 'integer', 'min:1', 'max:' . self::MAX_CRAWL_PAGES],
+        ]);
+
+        $startUrl = rtrim($request->input('url'), '/');
+        $maxPages = (int) ($request->input('max_pages', self::MAX_CRAWL_PAGES));
+
+        $scheme = strtolower(parse_url($startUrl, PHP_URL_SCHEME) ?? '');
+        if (!in_array($scheme, ['http', 'https'], true)) {
+            return $this->error('Only http/https URLs are allowed.', 422);
+        }
+
+        $baseHost = strtolower(parse_url($startUrl, PHP_URL_HOST) ?? '');
+        if (empty($baseHost)) {
+            return $this->error('Invalid start URL.', 422);
+        }
+
+        // BFS crawl of internal links
+        $visited = [];     // url → true
+        $queue = [$startUrl];
+        $results = [];
+
+        while (!empty($queue) && count($results) < $maxPages) {
+            $url = array_shift($queue);
+            $normalised = $this->normaliseUrl($url);
+            if (isset($visited[$normalised]))
+                continue;
+            $visited[$normalised] = true;
+
+            // Security: only follow same-host links
+            $host = strtolower(parse_url($url, PHP_URL_HOST) ?? '');
+            if ($host !== $baseHost)
+                continue;
+
+            try {
+                $response = Http::withHeaders(['User-Agent' => self::UA])
+                    ->timeout(self::TIMEOUT)
+                    ->get($url);
+            } catch (\Throwable) {
+                $results[] = [
+                    'url' => $url,
+                    'error' => 'Could not reach this page.',
+                ];
+                continue;
+            }
+
+            $statusCode = $response->status();
+            $html = substr($response->body(), 0, self::MAX_BYTES);
+            $headers = $response->headers();
+
+            // Run SEO checks on this page
+            $checks = $this->runChecks($url, $html, $statusCode, $headers);
+            $passed = count(array_filter($checks, fn($c) => $c['status'] === 'pass'));
+            $total = count($checks);
+            $score = $total > 0 ? (int) round(($passed / $total) * 100) : 0;
+
+            $results[] = [
+                'url' => $url,
+                'score' => $score,
+                'passed' => $passed,
+                'total' => $total,
+                'issues' => array_values(array_filter($checks, fn($c) => $c['status'] !== 'pass')),
+                'passing' => array_values(array_filter($checks, fn($c) => $c['status'] === 'pass')),
+            ];
+
+            // Extract internal links from this page and add to queue
+            if ($response->successful()) {
+                $links = $this->extractInternalLinks($html, $url, $baseHost);
+                foreach ($links as $link) {
+                    $norm = $this->normaliseUrl($link);
+                    if (!isset($visited[$norm]) && !in_array($link, $queue, true)) {
+                        $queue[] = $link;
+                    }
+                }
+            }
+        }
+
+        // Overall site score = average of page scores
+        $scores = array_filter(array_column($results, 'score'), fn($s) => $s !== null);
+        $siteScore = count($scores) > 0 ? (int) round(array_sum($scores) / count($scores)) : 0;
+
+        return $this->success([
+            'start_url' => $startUrl,
+            'pages_crawled' => count($results),
+            'site_score' => $siteScore,
+            'results' => $results,
+        ]);
+    }
+
+    // ── Link extraction helper ────────────────────────────────────────────────
+
+    /**
+     * Extract all unique internal links from HTML, resolved to absolute URLs.
+     */
+    private function extractInternalLinks(string $html, string $pageUrl, string $baseHost): array
+    {
+        $dom = $this->loadDom($html);
+        $xpath = new \DOMXPath($dom);
+        $links = $xpath->query('//a[@href]');
+        if ($links === false)
+            return [];
+
+        $parsed = parse_url($pageUrl);
+        $scheme = $parsed['scheme'] ?? 'https';
+        $host = $parsed['host'] ?? $baseHost;
+        $basePath = isset($parsed['path']) ? dirname($parsed['path']) : '/';
+
+        $collected = [];
+        foreach ($links as $link) {
+            $href = trim($link->getAttribute('href') ?? '');
+            if ($href === '' || str_starts_with($href, '#') || str_starts_with($href, 'mailto:') || str_starts_with($href, 'tel:') || str_starts_with($href, 'javascript:')) {
+                continue;
+            }
+            // Resolve relative URLs
+            if (str_starts_with($href, '//')) {
+                $href = $scheme . ':' . $href;
+            } elseif (str_starts_with($href, '/')) {
+                $href = $scheme . '://' . $host . $href;
+            } elseif (!str_starts_with($href, 'http')) {
+                $href = $scheme . '://' . $host . rtrim($basePath, '/') . '/' . $href;
+            }
+            // Only keep same-host links
+            $linkHost = strtolower(parse_url($href, PHP_URL_HOST) ?? '');
+            if ($linkHost !== $baseHost)
+                continue;
+            // Strip fragment
+            $href = strtok($href, '#');
+            if ($href && !in_array($href, $collected, true)) {
+                $collected[] = $href;
+            }
+        }
+        return $collected;
+    }
+
+    private function normaliseUrl(string $url): string
+    {
+        // Remove trailing slash and fragment for dedup
+        return rtrim(strtok($url, '#') ?: $url, '/');
     }
 
     // ── Checks ────────────────────────────────────────────────────────────────
