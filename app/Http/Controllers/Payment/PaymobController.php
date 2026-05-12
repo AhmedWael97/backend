@@ -48,12 +48,21 @@ class PaymobController extends Controller
             'plan_id' => ['required', 'integer', 'exists:plans,id'],
         ]);
 
-        $apiKey = (string) config('services.paymob.api_key');
-        $integrationId = (int) config('services.paymob.integration_id');
-        $iframeId = (string) config('services.paymob.iframe_id');
+        // Resolve credentials: DB config (set by admin) takes priority, .env is the fallback.
+        $paymobMethod = PaymentMethod::where('type', 'paymob')->where('is_active', true)->first();
+
+        if (!$paymobMethod) {
+            return $this->error('Paymob payment is not enabled. Please contact support.', 503);
+        }
+
+        $dbConfig = $paymobMethod->config ?? [];
+
+        $apiKey        = (string) ($dbConfig['api_key']        ?? config('services.paymob.api_key', ''));
+        $integrationId = (int)    ($dbConfig['integration_id'] ?? config('services.paymob.integration_id', 0));
+        $iframeId      = (string) ($dbConfig['iframe_id']      ?? config('services.paymob.iframe_id', ''));
 
         if (!$apiKey || !$integrationId || !$iframeId) {
-            return $this->error('Paymob is not configured. Please contact support.', 503);
+            return $this->error('Paymob is not fully configured. Please contact support.', 503);
         }
 
         $user = $request->user();
@@ -176,7 +185,11 @@ class PaymobController extends Controller
      */
     public function webhook(Request $request): \Illuminate\Http\Response
     {
-        $hmacSecret = (string) config('services.paymob.hmac_secret');
+        // Resolve HMAC secret: DB config first, .env fallback.
+        $paymobMethod = PaymentMethod::where('type', 'paymob')->where('is_active', true)->first();
+        $dbConfig = $paymobMethod?->config ?? [];
+        $hmacSecret = (string) ($dbConfig['hmac_secret'] ?? config('services.paymob.hmac_secret', ''));
+
         $payload = $request->all();
 
         // ── HMAC verification ──────────────────────────────────────────────
@@ -301,16 +314,8 @@ class PaymobController extends Controller
 
     private function getOrCreatePaymobMethod(): PaymentMethod
     {
-        $existing = PaymentMethod::where('type', 'paymob')->where('is_active', true)->first();
-        if ($existing)
-            return $existing;
-
-        return PaymentMethod::create([
-            'name' => 'Paymob',
-            'name_ar' => 'باي موب',
-            'type' => 'paymob',
-            'is_active' => true,
-            'config' => [],
-        ]);
+        // By this point initiate() has already verified an active Paymob method exists.
+        // We fetch it again here to use as the FK on the Payment record.
+        return PaymentMethod::where('type', 'paymob')->where('is_active', true)->firstOrFail();
     }
 }
