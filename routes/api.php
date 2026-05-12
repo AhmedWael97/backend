@@ -419,6 +419,7 @@ Route::prefix('v1')->middleware('api.key')->group(function () {
             Route::get('segments', [AiController::class, 'segments'])->name('segments');
             Route::get('suggestions', [AiController::class, 'suggestions'])->name('suggestions');
             Route::get('report', [AiController::class, 'report'])->name('report');
+            Route::get('reports', [AiController::class, 'reports'])->name('reports');
             Route::post('analyze', [AiController::class, 'analyze'])->name('analyze');
             Route::get('quota', [AiController::class, 'quotaStatus'])->name('quota');
         });

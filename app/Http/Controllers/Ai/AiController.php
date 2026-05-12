@@ -57,6 +57,24 @@ class AiController extends Controller
         return $this->success($report ? $report->content : null);
     }
 
+    public function reports(Request $request, int $domainId): JsonResponse
+    {
+        $domain = $this->authorizedDomain($request, $domainId);
+
+        $reports = AiReport::where('domain_id', $domain->id)
+            ->latest('generated_at')
+            ->limit(20)
+            ->get(['id', 'type', 'status', 'generated_at', 'created_at'])
+            ->map(fn($r) => [
+                'id' => $r->id,
+                'type' => $r->type ?? 'full_analysis',
+                'status' => $r->status ?? 'completed',
+                'created_at' => $r->created_at,
+            ]);
+
+        return $this->success(['reports' => $reports]);
+    }
+
     // ── Token status ──────────────────────────────────────────────────────────
 
     public function quotaStatus(Request $request, int $domainId): JsonResponse
