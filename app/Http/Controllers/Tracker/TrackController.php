@@ -242,11 +242,19 @@ class TrackController extends Controller
         if (!is_array($value)) {
             return [];
         }
-        // Only scalar values, max 20 keys, max 100 chars per key/value
+        // Scalar values only, max 20 keys, max 100 chars per string value.
+        // Numeric types are preserved as-is so ClickHouse JSONExtractFloat/Int works correctly.
         $sanitized = [];
         foreach (array_slice($value, 0, 20) as $k => $v) {
             $key = substr(preg_replace('/[^a-zA-Z0-9_]/', '', (string) $k), 0, 100);
-            $sanitized[$key] = is_scalar($v) ? substr((string) $v, 0, 100) : null;
+            if ($key === '') {
+                continue;
+            }
+            if (is_int($v) || is_float($v)) {
+                $sanitized[$key] = $v;
+            } else {
+                $sanitized[$key] = is_scalar($v) ? substr((string) $v, 0, 100) : null;
+            }
         }
         return $sanitized;
     }
@@ -277,15 +285,19 @@ class TrackController extends Controller
             if (isset($reserved[$key])) {
                 continue;
             }
-            if (is_array($v) || is_object($v)) {
-                continue;
-            }
             $cleanKey = substr(preg_replace('/[^a-zA-Z0-9_]/', '', $key), 0, 100);
             if ($cleanKey === '') {
                 continue;
             }
-            if (!array_key_exists($cleanKey, $props)) {
-                $props[$cleanKey] = substr((string) $v, 0, 100);
+            if (is_array($v)) {
+                // Preserve array payloads (e.g. 'resources' from slow_resources events)
+                // so ClickHouse arrayJoin/JSONExtractArrayRaw queries work correctly.
+                if (!array_key_exists($cleanKey, $props)) {
+                    $props[$cleanKey] = $this->sanitizeNestedArray($v);
+                }
+            } elseif (!is_object($v) && !array_key_exists($cleanKey, $props)) {
+                // Preserve int/float types so ClickHouse JSONExtractFloat works on page_load data.
+                $props[$cleanKey] = is_int($v) || is_float($v) ? $v : substr((string) $v, 0, 100);
             }
             if (count($props) >= 20) {
                 break;
@@ -293,6 +305,36 @@ class TrackController extends Controller
         }
 
         return $props;
+    }
+
+    /**
+     * Sanitize a top-level array value (e.g. the 'resources' list in slow_resources events).
+     * Preserves numeric types and caps string lengths to prevent oversized payloads.
+     */
+    private function sanitizeNestedArray(array $arr, int $maxItems = 100): array
+    {
+        $result = [];
+        foreach (array_slice($arr, 0, $maxItems) as $item) {
+            if (!is_array($item)) {
+                continue;
+            }
+            $entry = [];
+            foreach ($item as $ik => $iv) {
+                $cleanKey = substr(preg_replace('/[^a-zA-Z0-9_]/', '', (string) $ik), 0, 50);
+                if ($cleanKey === '') {
+                    continue;
+                }
+                if (is_int($iv) || is_float($iv)) {
+                    $entry[$cleanKey] = $iv;
+                } elseif (is_bool($iv)) {
+                    $entry[$cleanKey] = $iv;
+                } elseif (is_string($iv)) {
+                    $entry[$cleanKey] = substr($iv, 0, 200);
+                }
+            }
+            $result[] = $entry;
+        }
+        return $result;
     }
 
     /**
