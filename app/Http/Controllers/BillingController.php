@@ -20,20 +20,29 @@ class BillingController extends Controller
     {
         $user = $request->user();
 
-        $subscription = Subscription::where('user_id', $user->id)
+        // The CURRENTLY-EFFECTIVE subscription drives the plan + limits the
+        // user actually has. The user's latest subscription row may be
+        // cancelled / expired / paused — in which case the user effectively
+        // has the Free plan and limits should reflect that.
+        $activeSubscription = $user->activeSubscription()->with('plan')->first();
+
+        // Latest is shown for the "Cancelled" / "Pending verification" badge.
+        $latestSubscription = $activeSubscription ?? Subscription::where('user_id', $user->id)
             ->with('plan')
             ->latest()
             ->first();
 
-        $plan = $subscription?->plan;
+        $plan = $activeSubscription?->plan;
 
         $domains = $user->domains()->count();
         $pageviews = 0; // ClickHouse query can be added here if needed
         $domainLimit = (int) ($plan?->getLimit('domains', 1) ?? 1);
         $pvLimit = (int) ($plan?->getLimit('pageviews_per_month', 10_000) ?? 10_000);
 
+        // Order by created_at not paid_at — pending payments have no paid_at
+        // and would otherwise sink to the bottom/top inconsistently.
         $payments = Payment::where('user_id', $user->id)
-            ->latest('paid_at')
+            ->latest('created_at')
             ->take(20)
             ->get(['id', 'amount', 'currency', 'status', 'paid_at', 'reference', 'metadata', 'created_at']);
 
@@ -50,13 +59,14 @@ class BillingController extends Controller
             ->get(['id', 'name', 'name_ar', 'type', 'config']);
 
         return $this->success([
-            'subscription' => $subscription ? [
-                'id' => $subscription->id,
-                'plan' => $plan,
-                'status' => $subscription->status,
+            'subscription' => $latestSubscription ? [
+                'id' => $latestSubscription->id,
+                'plan' => $latestSubscription->plan,
+                'status' => $latestSubscription->status,
                 'trial_ends_at' => null,
-                'ends_at' => $subscription->cancelled_at?->toIso8601String(),
-                'current_period_end' => $subscription->current_period_end?->toIso8601String(),
+                'ends_at' => $latestSubscription->cancelled_at?->toIso8601String(),
+                'current_period_end' => $latestSubscription->current_period_end?->toIso8601String(),
+                'is_active' => $activeSubscription !== null,
             ] : null,
             'usage' => ['domains' => $domains, 'pageviews' => $pageviews],
             'limits' => ['domains' => $domainLimit, 'pageviews_per_month' => $pvLimit],
