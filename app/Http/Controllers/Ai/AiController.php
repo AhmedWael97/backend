@@ -174,7 +174,11 @@ class AiController extends Controller
 
     public function dismissSuggestion(Request $request, int $id): JsonResponse
     {
-        $suggestion = AiSuggestion::whereHas('domain', fn($q) => $q->where('user_id', $request->user()->id))
+        $user = $request->user();
+        $suggestion = AiSuggestion::when(
+                !$user->isSuperAdmin(),
+                fn($q) => $q->whereHas('domain', fn($d) => $d->where('user_id', $user->id))
+            )
             ->findOrFail($id);
 
         $suggestion->update(['is_dismissed' => true]);
@@ -239,8 +243,9 @@ class AiController extends Controller
 
     private function authorizedDomain(Request $request, int $domainId): Domain
     {
+        $user = $request->user();
         return Domain::where('id', $domainId)
-            ->where('user_id', $request->user()->id)
+            ->when(!$user->isSuperAdmin(), fn($q) => $q->where('user_id', $user->id))
             ->firstOrFail();
     }
 }

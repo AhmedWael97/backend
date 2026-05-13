@@ -30,8 +30,9 @@ class EngagedVisitorsController extends Controller
 
     public function __invoke(Request $request, int $domainId): JsonResponse
     {
+        $user = $request->user();
         $domain = Domain::where('id', $domainId)
-            ->where('user_id', $request->user()->id)
+            ->when(!$user->isSuperAdmin(), fn($q) => $q->where('user_id', $user->id))
             ->firstOrFail();
 
         $start = $request->query('start', now()->subDays(30)->toDateString());

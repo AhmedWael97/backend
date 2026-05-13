@@ -13,7 +13,9 @@ abstract class BaseAnalyticsController extends Controller
      */
     protected function ownedDomain(Request $request, Domain $domain): Domain
     {
-        if ($domain->user_id !== $request->user()->id) {
+        $user = $request->user();
+
+        if ($domain->user_id !== $user->id && !$user->isSuperAdmin()) {
             abort(404);
         }
 

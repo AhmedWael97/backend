@@ -25,8 +25,9 @@ class ReplayController extends Controller
     /** List sessions that have a replay recording. */
     public function sessions(Request $request, int $domainId): JsonResponse
     {
+        $user = $request->user();
         $domain = Domain::where('id', $domainId)
-            ->where('user_id', $request->user()->id)
+            ->when(!$user->isSuperAdmin(), fn($q) => $q->where('user_id', $user->id))
             ->firstOrFail();
 
         $from = $request->query('from', now()->subDays(7)->format('Y-m-d'));
@@ -47,8 +48,9 @@ class ReplayController extends Controller
     /** Return all rrweb events for a single session (max 10 000 rows). */
     public function events(Request $request, int $domainId, string $sessionId): JsonResponse
     {
+        $user = $request->user();
         $domain = Domain::where('id', $domainId)
-            ->where('user_id', $request->user()->id)
+            ->when(!$user->isSuperAdmin(), fn($q) => $q->where('user_id', $user->id))
             ->firstOrFail();
 
         // Verify the recording belongs to this domain (403 if not found).
@@ -112,8 +114,9 @@ class ReplayController extends Controller
     /** Delete a replay recording (GDPR / manual cleanup). */
     public function destroy(Request $request, int $domainId, string $sessionId): JsonResponse
     {
+        $user = $request->user();
         $domain = Domain::where('id', $domainId)
-            ->where('user_id', $request->user()->id)
+            ->when(!$user->isSuperAdmin(), fn($q) => $q->where('user_id', $user->id))
             ->firstOrFail();
 
         $replay = SessionReplay::where('domain_id', $domain->id)

@@ -130,7 +130,9 @@ class PipelineManagementController extends Controller
 
     private function authorizeUser(Request $request, Domain $domain): void
     {
-        if ((int) $domain->user_id !== $request->user()->id) {
+        $user = $request->user();
+
+        if ((int) $domain->user_id !== $user->id && !$user->isSuperAdmin()) {
             abort(403);
         }
     }

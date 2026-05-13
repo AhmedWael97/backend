@@ -16,8 +16,9 @@ class UxErrorsController extends Controller
 
     public function __invoke(Request $request, int $domainId): JsonResponse
     {
+        $user = $request->user();
         $domain = Domain::where('id', $domainId)
-            ->where('user_id', $request->user()->id)
+            ->when(!$user->isSuperAdmin(), fn($q) => $q->where('user_id', $user->id))
             ->firstOrFail();
 
         $from = $request->query('from', now()->subDays(30)->format('Y-m-d'));

@@ -17,7 +17,9 @@ class CustomEventsStoreController extends Controller
 
     public function __invoke(Request $request, Domain $domain): JsonResponse
     {
-        if ((int) $domain->user_id !== (int) $request->user()->id) {
+        $user = $request->user();
+
+        if ((int) $domain->user_id !== (int) $user->id && !$user->isSuperAdmin()) {
             abort(403);
         }
 

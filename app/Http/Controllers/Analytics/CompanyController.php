@@ -20,8 +20,9 @@ class CompanyController extends Controller
      */
     public function index(Request $request, int $domainId): JsonResponse
     {
+        $user = $request->user();
         $domain = Domain::where('id', $domainId)
-            ->where('user_id', $request->user()->id)
+            ->when(!$user->isSuperAdmin(), fn($q) => $q->where('user_id', $user->id))
             ->firstOrFail();
 
         // Gate behind Pro plan
@@ -81,8 +82,9 @@ class CompanyController extends Controller
      */
     public function show(Request $request, int $domainId, string $companyDomain): JsonResponse
     {
+        $user = $request->user();
         $domain = Domain::where('id', $domainId)
-            ->where('user_id', $request->user()->id)
+            ->when(!$user->isSuperAdmin(), fn($q) => $q->where('user_id', $user->id))
             ->firstOrFail();
 
         $plan = optional($request->user()->subscription?->plan);

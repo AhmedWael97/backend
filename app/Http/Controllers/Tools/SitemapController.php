@@ -49,11 +49,11 @@ class SitemapController extends Controller
         $maxPages = (int) ($request->input('max_pages', $isPaid ? 100 : 50));
         $maxPages = min($maxPages, $pageLimit);
 
-        // If domain_id provided, ensure user owns it
+        // If domain_id provided, ensure user owns it (super admin bypasses)
         $domainId = null;
         if ($request->filled('domain_id')) {
             $domain = Domain::where('id', $request->input('domain_id'))
-                ->where('user_id', $user->id)
+                ->when(!$user->isSuperAdmin(), fn($q) => $q->where('user_id', $user->id))
                 ->first();
 
             if (!$domain) {
@@ -63,7 +63,7 @@ class SitemapController extends Controller
         } else {
             // Auto-detect: check if start URL host matches any of user's domains
             $host = strtolower(parse_url($url, PHP_URL_HOST) ?? '');
-            $matchedDomain = Domain::where('user_id', $user->id)
+            $matchedDomain = Domain::when(!$user->isSuperAdmin(), fn($q) => $q->where('user_id', $user->id))
                 ->where('domain', $host)
                 ->first();
             $domainId = $matchedDomain?->id;
@@ -96,7 +96,9 @@ class SitemapController extends Controller
 
     public function status(Request $request, SitemapJob $job): JsonResponse
     {
-        if ($job->user_id !== $request->user()->id) {
+        $user = $request->user();
+
+        if ($job->user_id !== $user->id && !$user->isSuperAdmin()) {
             return $this->error('Not found.', 404);
         }
 
@@ -138,7 +140,9 @@ class SitemapController extends Controller
 
     public function download(Request $request, SitemapJob $job): mixed
     {
-        if ($job->user_id !== $request->user()->id) {
+        $user = $request->user();
+
+        if ($job->user_id !== $user->id && !$user->isSuperAdmin()) {
             return $this->error('Not found.', 404);
         }
 
@@ -189,7 +193,9 @@ class SitemapController extends Controller
 
     public function history(Request $request): JsonResponse
     {
-        $jobs = SitemapJob::where('user_id', $request->user()->id)
+        $user = $request->user();
+
+        $jobs = SitemapJob::when(!$user->isSuperAdmin(), fn($q) => $q->where('user_id', $user->id))
             ->orderByDesc('created_at')
             ->limit(50)
             ->get(['id', 'start_url', 'status', 'pages_crawled', 'domain_id', 'created_at', 'completed_at', 'error_message', 'config']);

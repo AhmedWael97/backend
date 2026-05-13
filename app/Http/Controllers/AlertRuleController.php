@@ -11,8 +11,9 @@ class AlertRuleController extends Controller
 {
     public function index(Request $request, int $domainId): JsonResponse
     {
+        $user = $request->user();
         $domain = Domain::where('id', $domainId)
-            ->where('user_id', $request->user()->id)
+            ->when(!$user->isSuperAdmin(), fn($q) => $q->where('user_id', $user->id))
             ->firstOrFail();
 
         return $this->success(AlertRule::where('domain_id', $domain->id)->get());
@@ -20,8 +21,9 @@ class AlertRuleController extends Controller
 
     public function store(Request $request, int $domainId): JsonResponse
     {
+        $user = $request->user();
         $domain = Domain::where('id', $domainId)
-            ->where('user_id', $request->user()->id)
+            ->when(!$user->isSuperAdmin(), fn($q) => $q->where('user_id', $user->id))
             ->firstOrFail();
 
         $data = $request->validate([
@@ -51,7 +53,11 @@ class AlertRuleController extends Controller
 
     public function update(Request $request, int $id): JsonResponse
     {
-        $rule = AlertRule::whereHas('domain', fn($q) => $q->where('user_id', $request->user()->id))
+        $user = $request->user();
+        $rule = AlertRule::when(
+                !$user->isSuperAdmin(),
+                fn($q) => $q->whereHas('domain', fn($d) => $d->where('user_id', $user->id))
+            )
             ->findOrFail($id);
 
         $data = $request->validate([
@@ -68,7 +74,11 @@ class AlertRuleController extends Controller
 
     public function destroy(Request $request, int $id): JsonResponse
     {
-        AlertRule::whereHas('domain', fn($q) => $q->where('user_id', $request->user()->id))
+        $user = $request->user();
+        AlertRule::when(
+                !$user->isSuperAdmin(),
+                fn($q) => $q->whereHas('domain', fn($d) => $d->where('user_id', $user->id))
+            )
             ->findOrFail($id)
             ->delete();
 

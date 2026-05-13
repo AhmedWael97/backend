@@ -17,8 +17,9 @@ class SharedReportController extends Controller
 
     public function index(Request $request, int $domainId): JsonResponse
     {
+        $user = $request->user();
         $domain = Domain::where('id', $domainId)
-            ->where('user_id', $request->user()->id)
+            ->when(!$user->isSuperAdmin(), fn($q) => $q->where('user_id', $user->id))
             ->firstOrFail();
 
         return $this->success(
@@ -48,8 +49,9 @@ class SharedReportController extends Controller
             'expires_at' => ['nullable', 'date'],
         ]);
 
+        $user = $request->user();
         Domain::where('id', $data['domain_id'])
-            ->where('user_id', $request->user()->id)
+            ->when(!$user->isSuperAdmin(), fn($q) => $q->where('user_id', $user->id))
             ->firstOrFail();
 
         $report = SharedReport::create([

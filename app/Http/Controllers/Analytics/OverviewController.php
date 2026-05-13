@@ -20,8 +20,9 @@ class OverviewController extends BaseAnalyticsController
      */
     public function __invoke(Request $request, int $domainId): JsonResponse
     {
+        $user = $request->user();
         $domain = Domain::where('id', $domainId)
-            ->where('user_id', $request->user()->id)
+            ->when(!$user->isSuperAdmin(), fn($q) => $q->where('user_id', $user->id))
             ->firstOrFail();
 
         ['start' => $start, 'end' => $end] = $this->parsePeriod($request->query('period', '30d'));

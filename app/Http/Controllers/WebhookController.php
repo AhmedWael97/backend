@@ -14,8 +14,9 @@ class WebhookController extends Controller
 {
     public function index(Request $request, int $domainId): JsonResponse
     {
+        $user = $request->user();
         $domain = Domain::where('id', $domainId)
-            ->where('user_id', $request->user()->id)
+            ->when(!$user->isSuperAdmin(), fn($q) => $q->where('user_id', $user->id))
             ->firstOrFail();
 
         return $this->success(Webhook::where('domain_id', $domain->id)->get());
@@ -23,8 +24,9 @@ class WebhookController extends Controller
 
     public function store(Request $request, int $domainId): JsonResponse
     {
+        $user = $request->user();
         $domain = Domain::where('id', $domainId)
-            ->where('user_id', $request->user()->id)
+            ->when(!$user->isSuperAdmin(), fn($q) => $q->where('user_id', $user->id))
             ->firstOrFail();
 
         $data = $request->validate([
@@ -48,7 +50,11 @@ class WebhookController extends Controller
 
     public function update(Request $request, int $id): JsonResponse
     {
-        $webhook = Webhook::whereHas('domain', fn($q) => $q->where('user_id', $request->user()->id))
+        $user = $request->user();
+        $webhook = Webhook::when(
+                !$user->isSuperAdmin(),
+                fn($q) => $q->whereHas('domain', fn($d) => $d->where('user_id', $user->id))
+            )
             ->findOrFail($id);
 
         $data = $request->validate([
@@ -66,7 +72,11 @@ class WebhookController extends Controller
 
     public function destroy(Request $request, int $id): JsonResponse
     {
-        Webhook::whereHas('domain', fn($q) => $q->where('user_id', $request->user()->id))
+        $user = $request->user();
+        Webhook::when(
+                !$user->isSuperAdmin(),
+                fn($q) => $q->whereHas('domain', fn($d) => $d->where('user_id', $user->id))
+            )
             ->findOrFail($id)
             ->delete();
 
@@ -78,7 +88,11 @@ class WebhookController extends Controller
      */
     public function logs(Request $request, int $id): JsonResponse
     {
-        $webhook = Webhook::whereHas('domain', fn($q) => $q->where('user_id', $request->user()->id))
+        $user = $request->user();
+        $webhook = Webhook::when(
+                !$user->isSuperAdmin(),
+                fn($q) => $q->whereHas('domain', fn($d) => $d->where('user_id', $user->id))
+            )
             ->findOrFail($id);
 
         $deliveries = WebhookDelivery::where('webhook_id', $webhook->id)
@@ -94,7 +108,11 @@ class WebhookController extends Controller
      */
     public function test(Request $request, int $id): JsonResponse
     {
-        $webhook = Webhook::whereHas('domain', fn($q) => $q->where('user_id', $request->user()->id))
+        $user = $request->user();
+        $webhook = Webhook::when(
+                !$user->isSuperAdmin(),
+                fn($q) => $q->whereHas('domain', fn($d) => $d->where('user_id', $user->id))
+            )
             ->findOrFail($id);
 
         $payload = [

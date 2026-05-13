@@ -65,7 +65,9 @@ class DomainController extends Controller
 
     public function show(Request $request, Domain $domain): JsonResponse
     {
-        if ($domain->user_id !== $request->user()->id) {
+        $user = $request->user();
+
+        if ($domain->user_id !== $user->id && !$user->isSuperAdmin()) {
             return $this->error('Not found.', 404);
         }
 
@@ -74,7 +76,9 @@ class DomainController extends Controller
 
     public function update(UpdateDomainRequest $request, Domain $domain): JsonResponse
     {
-        if ($domain->user_id !== $request->user()->id) {
+        $user = $request->user();
+
+        if ($domain->user_id !== $user->id && !$user->isSuperAdmin()) {
             return $this->error('Not found.', 404);
         }
 
@@ -85,7 +89,9 @@ class DomainController extends Controller
 
     public function destroy(Request $request, Domain $domain): JsonResponse
     {
-        if ($domain->user_id !== $request->user()->id) {
+        $user = $request->user();
+
+        if ($domain->user_id !== $user->id && !$user->isSuperAdmin()) {
             return $this->error('Not found.', 404);
         }
 
@@ -101,7 +107,9 @@ class DomainController extends Controller
      */
     public function rotateToken(Request $request, Domain $domain): JsonResponse
     {
-        if ($domain->user_id !== $request->user()->id) {
+        $user = $request->user();
+
+        if ($domain->user_id !== $user->id && !$user->isSuperAdmin()) {
             return $this->error('Not found.', 404);
         }
 
@@ -122,7 +130,9 @@ class DomainController extends Controller
      */
     public function verifyScript(Request $request, Domain $domain): JsonResponse
     {
-        if ($domain->user_id !== $request->user()->id) {
+        $user = $request->user();
+
+        if ($domain->user_id !== $user->id && !$user->isSuperAdmin()) {
             return $this->error('Not found.', 404);
         }
 
@@ -143,7 +153,9 @@ class DomainController extends Controller
 
     public function listExclusions(Request $request, Domain $domain): JsonResponse
     {
-        if ($domain->user_id !== $request->user()->id) {
+        $user = $request->user();
+
+        if ($domain->user_id !== $user->id && !$user->isSuperAdmin()) {
             return $this->error('Not found.', 404);
         }
 
@@ -152,7 +164,9 @@ class DomainController extends Controller
 
     public function storeExclusion(StoreExclusionRequest $request, Domain $domain): JsonResponse
     {
-        if ($domain->user_id !== $request->user()->id) {
+        $user = $request->user();
+
+        if ($domain->user_id !== $user->id && !$user->isSuperAdmin()) {
             return $this->error('Not found.', 404);
         }
 
@@ -174,7 +188,10 @@ class DomainController extends Controller
 
     public function destroyExclusion(Request $request, Domain $domain, DomainExclusion $exclusion): JsonResponse
     {
-        if ($domain->user_id !== $request->user()->id || $exclusion->domain_id !== $domain->id) {
+        $user = $request->user();
+        $ownsDomain = $domain->user_id === $user->id || $user->isSuperAdmin();
+
+        if (!$ownsDomain || $exclusion->domain_id !== $domain->id) {
             return $this->error('Not found.', 404);
         }
 

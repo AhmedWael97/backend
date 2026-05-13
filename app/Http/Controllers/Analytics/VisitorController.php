@@ -19,8 +19,9 @@ class VisitorController extends Controller
      */
     public function index(Request $request, int $domainId): JsonResponse
     {
+        $user = $request->user();
         $domain = Domain::where('id', $domainId)
-            ->where('user_id', $request->user()->id)
+            ->when(!$user->isSuperAdmin(), fn($q) => $q->where('user_id', $user->id))
             ->firstOrFail();
 
         $page = max(1, (int) $request->query('page', 1));
@@ -83,8 +84,9 @@ class VisitorController extends Controller
      */
     public function show(Request $request, int $domainId, string $visitorId): JsonResponse
     {
+        $user = $request->user();
         $domain = Domain::where('id', $domainId)
-            ->where('user_id', $request->user()->id)
+            ->when(!$user->isSuperAdmin(), fn($q) => $q->where('user_id', $user->id))
             ->firstOrFail();
 
         $safeVisitor = addslashes($visitorId);

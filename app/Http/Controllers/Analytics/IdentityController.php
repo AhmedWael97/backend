@@ -12,8 +12,9 @@ class IdentityController extends Controller
 {
     public function index(Request $request, int $domainId): JsonResponse
     {
+        $user = $request->user();
         $domain = Domain::where('id', $domainId)
-            ->where('user_id', $request->user()->id)
+            ->when(!$user->isSuperAdmin(), fn($q) => $q->where('user_id', $user->id))
             ->firstOrFail();
 
         $search = $request->query('search');
@@ -49,8 +50,9 @@ class IdentityController extends Controller
 
     public function show(Request $request, int $domainId, string $externalId): JsonResponse
     {
+        $user = $request->user();
         $domain = Domain::where('id', $domainId)
-            ->where('user_id', $request->user()->id)
+            ->when(!$user->isSuperAdmin(), fn($q) => $q->where('user_id', $user->id))
             ->firstOrFail();
 
         $identity = VisitorIdentity::where('domain_id', $domain->id)
