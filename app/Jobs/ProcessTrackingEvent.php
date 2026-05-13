@@ -109,6 +109,9 @@ class ProcessTrackingEvent implements ShouldQueue
                         'os' => $row['os'],
                         'entry_url' => $row['url'],
                         'exit_url' => $row['url'],
+                        // Populate referrer so campaign attribution can classify
+                        // organic / social traffic when UTM params are absent.
+                        'referrer' => $row['referrer'],
                         'utm_source' => $utmSource,
                         'utm_medium' => $utmMedium,
                         'utm_campaign' => $utmCampaign,
