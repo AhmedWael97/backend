@@ -88,14 +88,30 @@ class SharedReportController extends Controller
         $from = now()->subDays(30);
         $to = now();
 
-        $snapshot = [
+        $stats = $this->analytics->stats($domain->id, $from, $to, 'day');
+        $summary = $stats['summary'] ?? [];
+
+        return $this->success([
             'label' => $report->label,
-            'domain' => $domain->domain,
+            'domain' => [
+                'id' => $domain->id,
+                'name' => $domain->domain,
+            ],
             'allowed_pages' => $report->allowed_pages,
             'expires_at' => $report->expires_at,
-            'stats' => $this->analytics->stats($domain->id, $from, $to, 'day'),
-        ];
-
-        return $this->success($snapshot);
+            'analytics' => [
+                'visitors' => (int) ($summary['unique_visitors'] ?? 0),
+                'sessions' => (int) ($summary['sessions'] ?? 0),
+                'pageviews' => (int) ($summary['pageviews'] ?? 0),
+                'avg_duration' => (int) ($summary['avg_duration'] ?? 0),
+                'bounce_rate' => (float) ($summary['bounce_rate'] ?? 0),
+                'trend' => array_map(fn($row) => [
+                    'date' => $row['period'] ?? '',
+                    'visitors' => (int) ($row['unique_visitors'] ?? 0),
+                    'pageviews' => (int) ($row['pageviews'] ?? 0),
+                    'sessions' => (int) ($row['sessions'] ?? 0),
+                ], $stats['timeseries'] ?? []),
+            ],
+        ]);
     }
 }

@@ -22,7 +22,15 @@ class ReplayController extends Controller
     {
     }
 
-    /** List sessions that have a replay recording. */
+    /**
+     * List sessions that have a *playable* replay recording.
+     *
+     * A recording is only surfaced when it actually has enough events to be
+     * meaningful — recordings still in `recording` state, with no events, or
+     * with so few events that no FullSnapshot ever made it through, would
+     * appear as broken videos in the UI. We filter them out here so the user
+     * never sees a thumbnail that fails to play.
+     */
     public function sessions(Request $request, int $domainId): JsonResponse
     {
         $user = $request->user();
@@ -33,7 +41,15 @@ class ReplayController extends Controller
         $from = $request->query('from', now()->subDays(7)->format('Y-m-d'));
         $to = $request->query('to', now()->format('Y-m-d'));
 
+        // Minimum event count for a recording to be considered viewable.
+        // A valid rrweb session needs at least one Meta (type 4) + one
+        // FullSnapshot (type 2) event plus a few IncrementalSnapshots to be
+        // worth showing. 10 is a safe lower bound observed in production.
+        $minEvents = 10;
+
         $replays = SessionReplay::where('domain_id', $domain->id)
+            ->where('status', 'complete')
+            ->where('event_count', '>=', $minEvents)
             ->whereBetween('recorded_at', [
                 $from . ' 00:00:00',
                 $to . ' 23:59:59',
