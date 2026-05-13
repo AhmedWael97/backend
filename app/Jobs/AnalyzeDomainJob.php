@@ -245,19 +245,10 @@ PROMPT;
 
         $userMessage = "Website analytics data:\n\n{$dataCtx}";
 
-        // Deduct token / mark free run BEFORE the API call so a refund is possible on failure
-        DB::transaction(function () use ($user) {
-            $user->refresh();
-            if ($this->isFreeRun) {
-                $user->update(['ai_free_used' => true]);
-            } else {
-                if ($user->ai_tokens < 1) {
-                    throw new \RuntimeException('Insufficient AI tokens.');
-                }
-                $user->decrement('ai_tokens');
-                $this->tokenDeducted = true;
-            }
-        });
+        // Token / free-run was claimed atomically in AiController::analyze so the
+        // user couldn't double-spend across concurrent requests. The job's only
+        // responsibility now is to remember the claim so failed() can refund.
+        $this->tokenDeducted = !$this->isFreeRun;
 
         $result = $openai->complete($systemPrompt, $userMessage, 4096);
 

@@ -19,28 +19,33 @@ class UxScoreController extends Controller
             ->when(!$user->isSuperAdmin(), fn($q) => $q->where('user_id', $user->id))
             ->firstOrFail();
 
-        // Ensure UX score is available and reasonably fresh for dashboard reads.
         $latest = UxScore::where('domain_id', $domain->id)->latest('calculated_at')->first();
-        if (!$latest || $latest->calculated_at?->lt(now()->subMinutes(15))) {
-            ComputeUxScoreJob::dispatchSync($domain->id);
+        $stale = !$latest || ($latest->calculated_at && $latest->calculated_at->lt(now()->subMinutes(15)));
+
+        // Async refresh when data is stale — never block the HTTP request on a
+        // multi-query ClickHouse aggregate. A Redis-backed cache key prevents a
+        // thundering herd of refresh dispatches when many dashboards load.
+        if ($stale) {
+            $lockKey = "ux:score:refresh:{$domain->id}";
+            if (\Illuminate\Support\Facades\Cache::add($lockKey, 1, now()->addMinutes(5))) {
+                ComputeUxScoreJob::dispatch($domain->id)->onQueue('ai');
+            }
         }
 
-        $score = UxScore::where('domain_id', $domain->id)
-            ->latest('calculated_at')
-            ->first();
-
-        if (!$score) {
+        if (!$latest) {
             return $this->success([
                 'score' => null,
                 'breakdown' => null,
                 'calculated_at' => null,
+                'is_stale' => true,
             ]);
         }
 
         return $this->success([
-            'score' => $score->score,
-            'breakdown' => $score->breakdown,
-            'calculated_at' => $score->calculated_at,
+            'score' => $latest->score,
+            'breakdown' => $latest->breakdown,
+            'calculated_at' => $latest->calculated_at,
+            'is_stale' => $stale,
         ]);
     }
 }

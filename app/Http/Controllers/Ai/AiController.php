@@ -139,20 +139,36 @@ class AiController extends Controller
             );
         }
 
-        // Token / entitlement check
+        // Token / entitlement check — claim atomically so concurrent requests
+        // cannot both pass the gate and run two free analyses (or burn the same
+        // single token twice). The DB row update is the single source of truth.
         $isFreeRun = false;
 
         if ($isFree) {
-            if ($user->ai_free_used) {
+            // Atomic claim: only the request whose UPDATE affects a row gets the
+            // free run. The condition `ai_free_used = false` ensures exactly one
+            // winner across any number of concurrent requests.
+            $claimed = \DB::table('users')
+                ->where('id', $user->id)
+                ->where('ai_free_used', false)
+                ->update(['ai_free_used' => true]);
+
+            if ($claimed !== 1) {
                 return $this->error(
                     'You have used your free AI analysis. Purchase tokens to run more reports.',
                     402,
                     ['token_packs' => self::TOKEN_PACKS, 'ai_tokens' => $user->ai_tokens]
                 );
             }
-            $isFreeRun = true; // will be marked used inside the job
+            $isFreeRun = true;
         } else {
-            if ($user->ai_tokens < 1) {
+            // Atomic decrement: only succeeds if the user still has ≥ 1 token.
+            $claimed = \DB::table('users')
+                ->where('id', $user->id)
+                ->where('ai_tokens', '>=', 1)
+                ->update(['ai_tokens' => \DB::raw('ai_tokens - 1')]);
+
+            if ($claimed !== 1) {
                 return $this->error(
                     'You have no AI tokens remaining. Purchase more to continue.',
                     402,
@@ -161,11 +177,13 @@ class AiController extends Controller
             }
         }
 
+        // AnalyzeDomainJob::failed() refunds the token (or resets ai_free_used)
+        // on job failure, so a hard crash inside the job doesn't strand the user.
         AnalyzeDomainJob::dispatch($domain->id, $user->id, $isFreeRun)->onQueue('ai');
 
         return $this->success([
             'message' => 'AI analysis started. Results will appear in a few moments.',
-            'ai_tokens' => $user->ai_tokens - ($isFreeRun ? 0 : 1),
+            'ai_tokens' => max(0, $user->ai_tokens - ($isFreeRun ? 0 : 1)),
             'is_free_run' => $isFreeRun,
         ], 202);
     }
@@ -200,8 +218,9 @@ class AiController extends Controller
      * POST /api/v1/ai/tokens/purchase
      * Body: { pack: 'starter'|'growth'|'pro' }
      *
-     * Creates a pending Payment record. The admin approves it to release tokens.
-     * Tokens are credited immediately so the user can proceed (admin can revoke if fraud).
+     * Creates a *pending* Payment record. Tokens are credited ONLY when an
+     * admin marks the payment as 'paid' via AdminPaymentController::approve.
+     * (Previously this credited tokens immediately — a free-product loophole.)
      */
     public function purchaseTokens(Request $request): JsonResponse
     {
@@ -212,7 +231,6 @@ class AiController extends Controller
         $pack = self::TOKEN_PACKS[$data['pack']];
         $user = $request->user();
 
-        // Create payment record (pending — admin will verify / Stripe integration future)
         $payment = Payment::create([
             'user_id' => $user->id,
             'amount' => $pack['price_usd'],
@@ -227,15 +245,13 @@ class AiController extends Controller
             ],
         ]);
 
-        // Credit tokens immediately — admin will follow up on payment
-        $user->increment('ai_tokens', $pack['tokens']);
-
         return $this->success([
-            'message' => "Successfully credited {$pack['tokens']} AI tokens to your account.",
-            'ai_tokens' => $user->fresh()->ai_tokens,
+            'message' => "Your purchase is pending verification. Tokens will be credited once payment is confirmed.",
+            'ai_tokens' => $user->ai_tokens,
             'payment_id' => $payment->id,
             'amount_usd' => $pack['price_usd'],
             'pack' => $data['pack'],
+            'status' => 'pending',
         ], 201);
     }
 

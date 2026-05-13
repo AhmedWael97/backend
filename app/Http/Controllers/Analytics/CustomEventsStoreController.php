@@ -7,7 +7,6 @@ use App\Models\Domain;
 use App\Services\ClickHouseService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Str;
 
 class CustomEventsStoreController extends Controller
 {
@@ -23,10 +22,15 @@ class CustomEventsStoreController extends Controller
             abort(403);
         }
 
+        // Require a real visitor + session attribution from the caller. Fabricating
+        // UUIDs server-side made every server-recorded event look like a brand-new
+        // visitor and inflated uniq(visitor_id) across the whole analytics layer.
         $data = $request->validate([
             'name' => ['required', 'string', 'max:64'],
             'props' => ['nullable', 'array'],
             'url' => ['nullable', 'string', 'max:2048'],
+            'session_id' => ['required', 'string', 'regex:/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i'],
+            'visitor_id' => ['required', 'string', 'regex:/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i'],
         ]);
 
         $props = [];
@@ -41,8 +45,8 @@ class CustomEventsStoreController extends Controller
         $this->clickhouse->insertJson('custom_events', [
             [
                 'domain_id' => $domain->id,
-                'session_id' => (string) Str::uuid(),
-                'visitor_id' => (string) Str::uuid(),
+                'session_id' => strtolower($data['session_id']),
+                'visitor_id' => strtolower($data['visitor_id']),
                 'name' => trim((string) $data['name']),
                 // Production schema stores props as String.
                 'props' => json_encode($props, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?: '{}',

@@ -47,8 +47,11 @@ class ReplayController extends Controller
         // worth showing. 10 is a safe lower bound observed in production.
         $minEvents = 10;
 
+        // No "status = complete" filter — nothing in the system flips that flag
+        // today, so requiring it would hide every legitimate recording.
+        // We rely on event_count + recorded_at recency as the playability gate.
         $replays = SessionReplay::where('domain_id', $domain->id)
-            ->where('status', 'complete')
+            ->where('status', '!=', 'pruned')
             ->where('event_count', '>=', $minEvents)
             ->whereBetween('recorded_at', [
                 $from . ' 00:00:00',

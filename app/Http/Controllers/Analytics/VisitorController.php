@@ -31,12 +31,15 @@ class VisitorController extends Controller
         $device = $request->query('device');
 
         $where = ['domain_id = ' . (int) $domain->id];
+        $params = [];
 
         if ($device && $device !== 'all') {
-            $where[] = "device = '" . addslashes($device) . "'";
+            $where[] = "device = :device";
+            $params['device'] = $device;
         }
         if ($search) {
-            $where[] = "visitor_id LIKE '%" . addslashes($search) . "%'";
+            $where[] = "visitor_id LIKE :search";
+            $params['search'] = '%' . $search . '%';
         }
 
         $whereClause = 'WHERE ' . implode(' AND ', $where);
@@ -48,7 +51,8 @@ class VisitorController extends Controller
                  FROM sessions
                  {$whereClause}
                  GROUP BY visitor_id
-             )"
+             )",
+            $params
         );
         $total = (int) ($countRows[0]['total'] ?? 0);
 
@@ -64,7 +68,8 @@ class VisitorController extends Controller
              {$whereClause}
              GROUP BY visitor_id
              ORDER BY last_seen DESC
-             LIMIT {$limit} OFFSET {$offset}"
+             LIMIT {$limit} OFFSET {$offset}",
+            $params
         );
 
         return response()->json([
@@ -89,26 +94,27 @@ class VisitorController extends Controller
             ->when(!$user->isSuperAdmin(), fn($q) => $q->where('user_id', $user->id))
             ->firstOrFail();
 
-        $safeVisitor = addslashes($visitorId);
         $domainId = (int) $domain->id;
 
         $sessions = $this->ch->select(
             "SELECT *
              FROM sessions
              WHERE domain_id = {$domainId}
-               AND visitor_id = '{$safeVisitor}'
+               AND visitor_id = :visitor_id
              ORDER BY started_at DESC
-             LIMIT 10"
+             LIMIT 10",
+            ['visitor_id' => $visitorId]
         );
 
         $pageviews = $this->ch->select(
             "SELECT url, title, toUnixTimestamp(ts) AS ts
              FROM events
              WHERE domain_id = {$domainId}
-               AND visitor_id = '{$safeVisitor}'
+               AND visitor_id = :visitor_id
                AND type = 'pageview'
              ORDER BY ts DESC
-             LIMIT 50"
+             LIMIT 50",
+            ['visitor_id' => $visitorId]
         );
 
         return $this->success([

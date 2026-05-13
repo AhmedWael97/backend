@@ -52,10 +52,13 @@ class CampaignsController extends Controller
         $endDt = $end . ' 23:59:59';
         $domainId = (int) $domain->id;
 
-        $safeGoal = $goal ? str_replace(["\\", "'"], ["\\\\", "\\'"], $goal) : '';
+        // Bind the goal as a parameter rather than escaping into the SQL. The
+        // events-CTE references :goal_pattern only when a goal is provided, so
+        // we conditionally include the param in each query's $params array.
         $goalSubClause = $goal
-            ? "maxIf(1, type = 'pageview' AND url LIKE '%{$safeGoal}%') AS has_goal"
+            ? "maxIf(1, type = 'pageview' AND url LIKE :goal_pattern) AS has_goal"
             : '0 AS has_goal';
+        $goalParams = $goal ? ['goal_pattern' => '%' . $goal . '%'] : [];
 
         $sourceSql = $this->sourceClassificationSql();
         $mediumSql = $this->mediumClassificationSql();
@@ -98,7 +101,7 @@ class CampaignsController extends Controller
             GROUP BY source, medium, campaign
             ORDER BY sessions DESC
             LIMIT 200
-        ");
+        ", $goalParams);
 
         // ── Top sources (for chart) ───────────────────────────────────────────
         $sources = $this->ch->select("
@@ -111,7 +114,7 @@ class CampaignsController extends Controller
             GROUP BY source, medium
             ORDER BY sessions DESC
             LIMIT 10
-        ");
+        ", $goalParams);
 
         // ── Daily trend per source (top 5 sources) ────────────────────────────
         $topSources = array_slice(array_map(fn($r) => $r['source'], $sources), 0, 5);
@@ -134,7 +137,7 @@ class CampaignsController extends Controller
                 WHERE source IN ({$sourceList})
                 GROUP BY date, source
                 ORDER BY date ASC
-            ");
+            ", $goalParams);
         }
 
         return response()->json([

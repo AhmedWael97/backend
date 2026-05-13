@@ -50,11 +50,17 @@ class OverviewController extends BaseAnalyticsController
             ], $timeseries),
         ];
 
-        // Optional comparison period
-        if ($request->query('compare') === '1' || $request->query('compare') === 'true') {
-            $diff = $start->diffInSeconds($end);
+        // Optional comparison period — match same calendar-day length so the
+        // trend chart aligns on day boundaries (seconds-based subtraction
+        // produces partial-day buckets at each edge).
+        if ($request->boolean('compare') || $request->query('compare') === 'true') {
+            $days = (int) match ($request->query('period', '30d')) {
+                '7d' => 7,
+                '90d' => 90,
+                default => 30,
+            };
             $prevEnd = (clone $start)->subSecond();
-            $prevStart = (clone $prevEnd)->subSeconds($diff);
+            $prevStart = (clone $start)->subDays($days)->startOfDay();
 
             $prevStats = $this->analytics->stats($domain->id, $prevStart, $prevEnd, 'day');
             $ps = $prevStats['summary'];

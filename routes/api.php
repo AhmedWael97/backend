@@ -518,6 +518,7 @@ Route::prefix('v1')->middleware('api.key')->group(function () {
         Route::prefix('payments')->name('payments.')->group(function () {
             Route::get('/', [AdminPaymentController::class, 'index'])->name('index');
             Route::get('{id}', [AdminPaymentController::class, 'show'])->name('show');
+            Route::post('{id}/approve', [AdminPaymentController::class, 'approve'])->name('approve');
             Route::post('{id}/refund', [AdminPaymentController::class, 'refund'])->name('refund');
         });
 

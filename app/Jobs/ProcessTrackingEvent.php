@@ -134,13 +134,17 @@ class ProcessTrackingEvent implements ShouldQueue
         }
 
         // Update session duration when the visitor navigates away (time_on_page event).
-        // The tracker sends { e: 'time_on_page', d: <seconds> }; TrackController maps d → duration.
+        //
+        // The tracker sends ABSOLUTE elapsed seconds each heartbeat (30s, 60s, 90s, …)
+        // plus a final visibilitychange→hidden ping with the same elapsed value.
+        // Using SUM here would triple-count the same 90-second visit as 30+60+90=180s.
+        // We use MAX so the column reflects the *peak* elapsed value reported.
         if ($row['type'] === 'time_on_page' && $row['duration'] > 0) {
             $dur = (int) $row['duration'];
             $sid = (string) $row['session_id'];
             $did = (int) $row['domain_id'];
             $clickhouse->statement(
-                "ALTER TABLE sessions UPDATE duration_seconds = duration_seconds + {$dur}"
+                "ALTER TABLE sessions UPDATE duration_seconds = greatest(duration_seconds, {$dur})"
                 . " WHERE session_id = '{$sid}' AND domain_id = {$did}"
             );
         }

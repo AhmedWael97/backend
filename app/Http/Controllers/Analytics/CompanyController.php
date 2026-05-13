@@ -38,9 +38,12 @@ class CompanyController extends Controller
         $limit = 50;
         $offset = ($page - 1) * $limit;
 
-        $industryFilter = $industry
-            ? "AND industry = '" . addslashes($industry) . "'"
-            : '';
+        $params = [];
+        $industryFilter = '';
+        if ($industry) {
+            $industryFilter = "AND industry = :industry";
+            $params['industry'] = $industry;
+        }
 
         $rows = $this->clickhouse->select("
             SELECT
@@ -64,7 +67,7 @@ class CompanyController extends Controller
             GROUP BY company_name
             ORDER BY sessions DESC
             LIMIT {$limit} OFFSET {$offset}
-        ");
+        ", $params);
 
         return response()->json([
             'statusCode' => 200,
@@ -106,12 +109,12 @@ class CompanyController extends Controller
             WHERE domain_id = {$domain->id}
               AND company_name = (
                   SELECT company_name FROM company_enrichments
-                  WHERE company_domain = '" . addslashes($companyDomain) . "'
+                  WHERE company_domain = :company_domain
                   LIMIT 1
               )
             ORDER BY started_at DESC
             LIMIT 200
-        ");
+        ", ['company_domain' => $companyDomain]);
 
         return $this->success($rows);
     }

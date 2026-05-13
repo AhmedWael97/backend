@@ -21,17 +21,30 @@ class AnalyticsQueryService
         $startStr = $start->format('Y-m-d H:i:s');
         $endStr = $end->format('Y-m-d H:i:s');
 
-        // Summary from events table
+        // Summary from events table.
+        //
+        // avg_duration semantics: "average actual session duration".
+        // The tracker emits time_on_page heartbeats with ABSOLUTE elapsed seconds
+        // (30, 60, 90, …) so the highest value per session is the real visit length.
+        // We pick MAX per session, then AVG across sessions, in a single query.
         $summaryRows = $this->clickhouse->select("
             SELECT
-                countIf(type = 'pageview')       AS pageviews,
+                sum(pv_count)                     AS pageviews,
                 uniq(visitor_id)                  AS unique_visitors,
-                uniq(session_id)                  AS sessions,
-                avgIf(duration, duration > 0)     AS avg_duration
-            FROM events
-            WHERE domain_id = {$domainId}
-              AND ts >= '{$startStr}'
-              AND ts < '{$endStr}'
+                count()                           AS sessions,
+                avg(session_duration)             AS avg_duration
+            FROM (
+                SELECT
+                    session_id,
+                    any(visitor_id) AS visitor_id,
+                    countIf(type = 'pageview') AS pv_count,
+                    maxIf(duration, type = 'time_on_page' AND duration > 0) AS session_duration
+                FROM events
+                WHERE domain_id = {$domainId}
+                  AND ts >= '{$startStr}'
+                  AND ts < '{$endStr}'
+                GROUP BY session_id
+            )
         ");
 
         $summary = $summaryRows[0] ?? [
@@ -105,6 +118,8 @@ class AnalyticsQueryService
         $startStr = $start->format('Y-m-d H:i:s');
         $endStr = $end->format('Y-m-d H:i:s');
 
+        // Per-page avg_duration: MAX time_on_page per (session_id, url),
+        // then AVG across visits to that URL. Matches the site-wide definition.
         $rows = $this->clickhouse->select("
             SELECT
                 url,

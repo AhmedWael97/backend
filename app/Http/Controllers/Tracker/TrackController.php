@@ -100,10 +100,26 @@ class TrackController extends Controller
         }
 
         // --- Daily quota check ---
+        //
+        // The quota is enforced atomically by INCR-ing by the batch size BEFORE
+        // dispatching jobs and then checking if the resulting counter exceeds
+        // the plan limit. INCR is atomic in Redis so concurrent requests cannot
+        // race past the gate. The previous "GET then INCR" pattern allowed each
+        // batched request (≤ 50 events) to cost only +1, effectively letting
+        // a plan with a 10 000-events/day limit ingest 500 000 events/day.
         $quotaKey = "quota:{$domain->script_token}:events:" . now()->format('Y-m-d');
-        $dailyLimit = optional($domain->user?->subscription?->plan)->getLimit('max_events_per_day_per_domain', 10000);
-        if ($dailyLimit !== -1 && (int) Redis::get($quotaKey) >= $dailyLimit) {
-            return response('', 200, $corsHeaders);
+        $sub = $domain->user?->activeSubscription?->plan ?? $domain->user?->subscription?->plan;
+        $dailyLimit = optional($sub)->getLimit('max_events_per_day_per_domain', 10000);
+
+        $batchSize = max(1, count($events));
+        $newCount = (int) Redis::incrby($quotaKey, $batchSize);
+        Redis::expire($quotaKey, 90000); // 25h to cover timezone drift
+
+        if ($dailyLimit !== -1 && $newCount > $dailyLimit) {
+            // Over quota — roll the increment back so we don't permanently
+            // penalize the domain for the events we just rejected.
+            Redis::decrby($quotaKey, $batchSize);
+            return response('', 429, $corsHeaders + ['Retry-After' => '3600']);
         }
 
         // Mark script as verified (first hit)
@@ -113,13 +129,24 @@ class TrackController extends Controller
 
         $ts = now()->format('Y-m-d H:i:s');
 
-        // Increment quota counter (TTL 25h to cover timezone drift)
-        Redis::incr($quotaKey);
-        Redis::expire($quotaKey, 90000);
-
         foreach ($events as $event) {
             $rawEvent = $this->sanitizeString($event['e'] ?? null, 64);
             $normalizedType = $this->sanitizeEventType($rawEvent ?? 'pageview');
+
+            // Bound numeric fields server-side. Clients can be buggy or hostile,
+            // and absurd values pollute analytics aggregates.
+            $screenW = max(0, min(20000, (int) ($event['sw'] ?? 0)));
+            $screenH = max(0, min(20000, (int) ($event['sh'] ?? 0)));
+            $duration = max(0, min(86400, (int) ($event['d'] ?? 0))); // 24h hard cap
+
+            $props = $this->extractProps($event);
+            // Clamp click x/y to [0,100] — they are document-percentages.
+            if (isset($props['x']) && is_numeric($props['x'])) {
+                $props['x'] = max(0, min(100, (float) $props['x']));
+            }
+            if (isset($props['y']) && is_numeric($props['y'])) {
+                $props['y'] = max(0, min(100, (float) $props['y']));
+            }
 
             $payload = [
                 'domain_id' => $domain->id,
@@ -131,10 +158,10 @@ class TrackController extends Controller
                 'url' => $this->sanitizeUrl($event['u'] ?? null),
                 'referrer' => $this->sanitizeUrl($event['r'] ?? null),
                 'title' => $this->sanitizeString($event['pt'] ?? null, 255),
-                'props' => $this->extractProps($event),
-                'screen_w' => (int) ($event['sw'] ?? 0),
-                'screen_h' => (int) ($event['sh'] ?? 0),
-                'duration' => (int) ($event['d'] ?? 0),
+                'props' => $props,
+                'screen_w' => $screenW,
+                'screen_h' => $screenH,
+                'duration' => $duration,
                 'ip' => $ip,
                 'user_agent' => $ua,
                 'ts' => $ts,

@@ -72,6 +72,23 @@ class User extends Authenticatable implements MustVerifyEmail
         return $this->hasOne(Subscription::class)->latestOfMany();
     }
 
+    /**
+     * Returns the user's currently-effective subscription — must be `active`
+     * AND not past `current_period_end`. Use this anywhere you read plan
+     * limits, so an expired subscription falls through to the free defaults
+     * instead of leaking paid limits forever.
+     */
+    public function activeSubscription(): HasOne
+    {
+        return $this->hasOne(Subscription::class)
+            ->where('status', 'active')
+            ->where(function ($q) {
+                $q->whereNull('current_period_end')
+                    ->orWhere('current_period_end', '>', now());
+            })
+            ->latestOfMany();
+    }
+
     public function subscriptions(): HasMany
     {
         return $this->hasMany(Subscription::class);

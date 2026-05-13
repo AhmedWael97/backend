@@ -32,14 +32,15 @@ class UxIssuesController extends Controller
         $where = "domain_id = {$domain->id}
             AND created_at >= '{$from} 00:00:00'
             AND created_at <= '{$to} 23:59:59'";
+        $params = [];
 
         if ($type) {
-            $safeType = addslashes($type);
-            $where .= " AND type = '{$safeType}'";
+            $where .= " AND type = :type";
+            $params['type'] = $type;
         }
         if ($url) {
-            $safeUrl = addslashes($url);
-            $where .= " AND url LIKE '%{$safeUrl}%'";
+            $where .= " AND url LIKE :url";
+            $params['url'] = '%' . $url . '%';
         }
 
         $rows = $this->clickhouse->select("
@@ -57,13 +58,13 @@ class UxIssuesController extends Controller
             GROUP BY type, url, element_selector, details
             ORDER BY occurrences DESC
             LIMIT {$limit} OFFSET {$offset}
-        ");
+        ", $params);
 
         $total = (int) ($this->clickhouse->select("
             SELECT count() AS c
             FROM ux_events
             WHERE {$where}
-        ")[0]['c'] ?? 0);
+        ", $params)[0]['c'] ?? 0);
 
         return $this->success([
             'data' => $rows,

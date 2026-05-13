@@ -19,3 +19,4 @@ Schedule::command('eye:cleanup-exports')->hourly();
 Schedule::command('eye:cleanup-tokens')->hourly();
 Schedule::command('eye:process-deletions')->everyFifteenMinutes();
 Schedule::command('eye:weekly-digest')->weeklyOn(1, '08:00'); // Monday 08:00 UTC
+Schedule::command('subscriptions:expire')->dailyAt('00:05');

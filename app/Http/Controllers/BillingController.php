@@ -74,8 +74,11 @@ class BillingController extends Controller
 
     /**
      * POST /api/billing/subscribe
-     * Assigns a plan to the authenticated user.
-     * In production this would initiate a payment checkout; here it directly creates/updates the subscription.
+     *
+     * Bank-transfer flow ONLY. The user uploads a receipt; the subscription is
+     * created in a `paused` state and only activates once an admin verifies the
+     * payment. Card / Paymob flows must go through `/billing/paymob/initiate`
+     * which runs the iframe + HMAC-verified webhook — never this endpoint.
      */
     public function subscribe(Request $request): JsonResponse
     {
@@ -83,7 +86,7 @@ class BillingController extends Controller
             'plan_id' => ['required', 'integer', 'exists:plans,id'],
             'payment_method_id' => ['nullable', 'integer', 'exists:payment_methods,id'],
             'transaction_reference' => ['nullable', 'string', 'max:120'],
-            'receipt' => ['nullable', 'file', 'image', 'max:5120'],
+            'receipt' => ['required', 'file', 'image', 'max:5120'],
         ]);
 
         $user = $request->user();
@@ -99,33 +102,32 @@ class BillingController extends Controller
             return $this->error('Selected payment method is not available.', 422);
         }
 
-        $isBankTransfer = $paymentMethod->type === 'bank_transfer';
-        if ($isBankTransfer && !$request->hasFile('receipt')) {
-            return $this->error('Transaction receipt image is required for bank transfer.', 422, [
-                'receipt' => ['Transaction receipt image is required for bank transfer.'],
-            ]);
+        // Only bank-transfer subscriptions can be initiated via this endpoint.
+        // Any other method must go through its dedicated gateway controller so
+        // payment is actually charged before access is granted.
+        if ($paymentMethod->type !== 'bank_transfer') {
+            return $this->error(
+                'This endpoint only accepts bank-transfer subscriptions. Use the dedicated payment gateway flow for card payments.',
+                422,
+            );
         }
 
-        $receiptPath = null;
-        $receiptUrl = null;
-        if ($request->hasFile('receipt')) {
-            $receiptPath = $request->file('receipt')->store("billing/receipts/{$user->id}", 'public');
-            $receiptUrl = Storage::url($receiptPath);
-        }
+        $isBankTransfer = true;
 
-        // Cancel any existing active subscription
-        Subscription::where('user_id', $user->id)
-            ->whereIn('status', ['active', 'trialing'])
-            ->update(['status' => 'cancelled', 'cancelled_at' => now()]);
+        $receiptPath = $request->file('receipt')->store("billing/receipts/{$user->id}", 'public');
+        $receiptUrl = Storage::url($receiptPath);
 
+        // Do NOT cancel the existing active subscription yet — only do so once the
+        // admin verifies the bank transfer. Otherwise a malicious user could
+        // submit a fake receipt and instantly lose their paid plan limits.
         $subscription = Subscription::create([
             'user_id' => $user->id,
             'plan_id' => $plan->id,
             'payment_method_id' => $paymentMethod->id,
-            'status' => $isBankTransfer ? 'paused' : 'active',
+            'status' => 'paused',
             'current_period_start' => now(),
             'current_period_end' => now()->addMonth(),
-            'notes' => $isBankTransfer ? 'Pending bank transfer verification.' : null,
+            'notes' => 'Pending bank transfer verification.',
         ]);
 
         $paymentMetadata = [
@@ -143,15 +145,13 @@ class BillingController extends Controller
             'payment_method_id' => $paymentMethod->id,
             'amount' => (float) ($plan->price_monthly ?? 0),
             'currency' => 'USD',
-            'status' => $isBankTransfer ? 'pending' : 'paid',
+            'status' => 'pending',
             'reference' => $data['transaction_reference'] ?? null,
             'metadata' => $paymentMetadata,
-            'paid_at' => $isBankTransfer ? null : now(),
+            'paid_at' => null,
         ]);
 
-        $message = $isBankTransfer
-            ? "Bank transfer request submitted for {$plan->name}. Your subscription will activate after payment verification."
-            : "Switched to {$plan->name} plan.";
+        $message = "Bank transfer request submitted for {$plan->name}. Your subscription will activate after payment verification.";
 
         return $this->success([
             'message' => $message,

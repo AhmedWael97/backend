@@ -206,15 +206,71 @@ class PaymobController extends Controller
         $obj = $payload['obj'] ?? [];
         $orderId = (string) ($obj['order']['id'] ?? '');
         $success = (bool) ($obj['success'] ?? false);
+        $isRefunded = (bool) ($obj['is_refunded'] ?? false);
+        $isVoided = (bool) ($obj['is_voided'] ?? false);
         $amountCents = (int) ($obj['amount_cents'] ?? 0);
         $transactionId = (string) ($obj['id'] ?? '');
 
-        $payment = Payment::where('reference', $orderId)
-            ->where('status', 'pending')
-            ->first();
+        // Look up regardless of status — refund and void webhooks arrive AFTER
+        // the payment is already 'paid', so filtering by status='pending' would
+        // make us silently swallow them.
+        $payment = Payment::where('reference', $orderId)->lockForUpdate()->first();
 
         if (!$payment) {
-            return response('', 200); // Already processed or unknown
+            Log::info('Paymob webhook: unknown order', ['order_id' => $orderId]);
+            return response('', 200);
+        }
+
+        // ── Amount-cents reconciliation ────────────────────────────────────
+        // Defense against a replayed/forged webhook from a smaller test charge.
+        // The Payment was created with `amount = plan->price_monthly` (decimal
+        // dollars/EGP). Convert to cents and compare with a 1-unit tolerance
+        // for floating-point rounding.
+        $expectedCents = (int) round((float) $payment->amount * 100);
+        if ($amountCents > 0 && abs($amountCents - $expectedCents) > 1) {
+            Log::warning('Paymob webhook: amount mismatch — rejecting', [
+                'order_id' => $orderId,
+                'expected_cents' => $expectedCents,
+                'received_cents' => $amountCents,
+            ]);
+            return response('', 200);
+        }
+
+        // ── Refund / void: reverse the linked subscription ─────────────────
+        if ($isRefunded || $isVoided) {
+            if ($payment->status !== 'refunded' && $payment->status !== 'voided') {
+                $payment->update([
+                    'status' => $isRefunded ? 'refunded' : 'voided',
+                    'metadata' => array_merge((array) ($payment->metadata ?? []), [
+                        'paymob_transaction_id' => $transactionId,
+                        $isRefunded ? 'refunded_at' : 'voided_at' => now()->toIso8601String(),
+                    ]),
+                ]);
+
+                if ($payment->subscription_id) {
+                    Subscription::where('id', $payment->subscription_id)
+                        ->update(['status' => 'cancelled', 'cancelled_at' => now()]);
+                }
+
+                // Reverse any AI tokens granted on this payment
+                $metadata = (array) ($payment->metadata ?? []);
+                if (($metadata['type'] ?? null) === 'ai_tokens' && $payment->user) {
+                    $tokens = (int) ($metadata['tokens'] ?? 0);
+                    if ($tokens > 0) {
+                        $payment->user->update([
+                            'ai_tokens' => max(0, ((int) $payment->user->ai_tokens) - $tokens),
+                        ]);
+                    }
+                }
+            }
+            return response('', 200);
+        }
+
+        // ── Idempotency: a successful webhook delivered twice for the same
+        // order must not double-activate. We only activate when the payment
+        // is still pending.
+        if ($payment->status !== 'pending') {
+            return response('', 200);
         }
 
         if ($success) {
@@ -227,12 +283,13 @@ class PaymobController extends Controller
                 ]),
             ]);
 
-            // Cancel any existing active subscription
-            Subscription::where('user_id', $payment->user_id)
+            // Cancel any existing active subscription only AFTER the new one is
+            // ready, so the user is never briefly without an active plan.
+            $oldActive = Subscription::where('user_id', $payment->user_id)
                 ->whereIn('status', ['active', 'trialing'])
-                ->update(['status' => 'cancelled', 'cancelled_at' => now()]);
+                ->get();
 
-            Subscription::create([
+            $newSubscription = Subscription::create([
                 'user_id' => $payment->user_id,
                 'plan_id' => $payment->plan_id,
                 'payment_method_id' => $payment->payment_method_id,
@@ -241,11 +298,14 @@ class PaymobController extends Controller
                 'current_period_end' => now()->addMonth(),
             ]);
 
-            // Link subscription to payment
-            $subscription = Subscription::where('user_id', $payment->user_id)
-                ->latest()->first();
-            if ($subscription) {
-                $payment->update(['subscription_id' => $subscription->id]);
+            // Link subscription to payment via explicit FK (avoids races with
+            // concurrent webhooks creating overlapping subscriptions).
+            $payment->update(['subscription_id' => $newSubscription->id]);
+
+            foreach ($oldActive as $sub) {
+                if ($sub->id !== $newSubscription->id) {
+                    $sub->update(['status' => 'cancelled', 'cancelled_at' => now()]);
+                }
             }
         } else {
             $payment->update(['status' => 'failed']);

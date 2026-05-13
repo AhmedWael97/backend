@@ -36,8 +36,12 @@ class DomainController extends Controller
     {
         $user = $request->user();
 
-        // Enforce domain limit for the user's active plan
-        $limit = optional($user->subscription?->plan)->getLimit('domains', 1);
+        // Enforce domain limit for the user's CURRENTLY-ACTIVE plan (i.e.
+        // status='active' AND not past period end). Falling back to the last
+        // subscription regardless of state would let an expired paid plan keep
+        // unlimited domains forever.
+        $activePlan = $user->activeSubscription?->plan;
+        $limit = optional($activePlan)->getLimit('domains', 1);
         if ($limit !== null && $limit !== -1 && $user->domains()->count() >= $limit) {
             return $this->error("Your plan allows up to {$limit} domain(s). Please upgrade to add more.", 422);
         }

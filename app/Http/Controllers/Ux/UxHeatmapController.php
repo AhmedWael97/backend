@@ -25,10 +25,12 @@ class UxHeatmapController extends Controller
         $from = $request->query('from', now()->subDays(30)->format('Y-m-d'));
         $to = $request->query('to', now()->format('Y-m-d'));
 
-        $safeUrl = addslashes($url);
-        $urlFilter = $safeUrl !== ''
-            ? "AND url = '{$safeUrl}'"
-            : '';
+        $params = [];
+        $urlFilter = '';
+        if ($url !== '') {
+            $urlFilter = "AND url = :url";
+            $params['url'] = $url;
+        }
 
         $rows = $this->clickhouse->select("
             SELECT
@@ -49,7 +51,7 @@ class UxHeatmapController extends Controller
             GROUP BY url, type, x, y
             ORDER BY url ASC, count DESC
             LIMIT 4000
-        ");
+        ", $params);
 
         return $this->success($rows);
     }

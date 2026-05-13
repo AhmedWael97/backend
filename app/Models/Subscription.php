@@ -27,9 +27,33 @@ class Subscription extends Model
         ];
     }
 
+    /**
+     * A subscription is only truly "active" if its status flag says so AND
+     * the current_period_end hasn't elapsed. Without the date guard, an
+     * expired paid plan would keep its limits forever.
+     */
     public function isActive(): bool
     {
-        return $this->status === 'active';
+        if ($this->status !== 'active') {
+            return false;
+        }
+        if (!$this->current_period_end) {
+            return true;
+        }
+        return $this->current_period_end->isFuture();
+    }
+
+    /**
+     * Query scope: subscriptions that are currently active for the user
+     * (status='active' AND not past period end).
+     */
+    public function scopeActive($query)
+    {
+        return $query->where('status', 'active')
+            ->where(function ($q) {
+                $q->whereNull('current_period_end')
+                    ->orWhere('current_period_end', '>', now());
+            });
     }
 
     public function user(): BelongsTo
