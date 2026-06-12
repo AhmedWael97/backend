@@ -56,12 +56,15 @@ class ProcessTrackingEvent implements ShouldQueue
             'ts' => $p['ts'],
         ];
 
-        // Extract UTM params from props
-        $utmSource = (string) ($p['props']['utm_source'] ?? '');
-        $utmMedium = (string) ($p['props']['utm_medium'] ?? '');
-        $utmCampaign = (string) ($p['props']['utm_campaign'] ?? '');
-        $utmTerm = (string) ($p['props']['utm_term'] ?? '');
-        $utmContent = (string) ($p['props']['utm_content'] ?? '');
+        // Extract UTM params from props.
+        // The tracker snippet sends them as compact keys (us/um/uc/ut/ux — see
+        // eye.js doPageview()). Direct API callers may send the full utm_* names.
+        // Read the short keys first, then fall back to the long names.
+        $utmSource = (string) ($p['props']['us'] ?? $p['props']['utm_source'] ?? '');
+        $utmMedium = (string) ($p['props']['um'] ?? $p['props']['utm_medium'] ?? '');
+        $utmCampaign = (string) ($p['props']['uc'] ?? $p['props']['utm_campaign'] ?? '');
+        $utmTerm = (string) ($p['props']['ut'] ?? $p['props']['utm_term'] ?? '');
+        $utmContent = (string) ($p['props']['ux'] ?? $p['props']['utm_content'] ?? '');
 
         $row['utm_source'] = $utmSource;
         $row['utm_medium'] = $utmMedium;
@@ -171,6 +174,37 @@ class ProcessTrackingEvent implements ShouldQueue
                     'ts' => $row['ts'],
                 ]
             ]);
+        }
+
+        // Revenue conversions — purchase-style custom events that carry a value.
+        // Written to the dedicated `conversions` table so campaign revenue
+        // attribution (last-touch ASOF JOIN) runs efficiently. See CampaignsController.
+        if ($row['type'] === 'custom') {
+            $convName = strtolower($customEventName);
+            if (in_array($convName, ['purchase', 'order_completed', 'checkout_complete'], true)) {
+                $props = $p['props'] ?? [];
+                $value = (float) ($props['value'] ?? $props['revenue'] ?? $props['amount'] ?? 0);
+                $currency = strtoupper(substr((string) ($props['currency'] ?? ''), 0, 8));
+                $orderId = trim((string) ($props['order_id'] ?? $props['orderId'] ?? $props['order'] ?? ''));
+                if ($orderId === '') {
+                    // No order id supplied — synthesize a deterministic one so a
+                    // reloaded confirmation page dedupes, but distinct orders don't.
+                    $orderId = 'auto-' . substr(hash('sha1', $row['session_id'] . $convName . $value . $row['ts']), 0, 16);
+                }
+                $clickhouse->insertJson('conversions', [
+                    [
+                        'domain_id' => $row['domain_id'],
+                        'order_id' => substr($orderId, 0, 128),
+                        'session_id' => $row['session_id'],
+                        'visitor_id' => $row['visitor_id'],
+                        'value' => $value,
+                        'currency' => $currency,
+                        'name' => substr($convName, 0, 64),
+                        'url' => $row['url'],
+                        'ts' => $row['ts'],
+                    ]
+                ]);
+            }
         }
 
         // Handle identify events — upsert visitor_identities.

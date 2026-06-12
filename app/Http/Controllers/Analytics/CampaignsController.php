@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Analytics;
 
 use App\Http\Controllers\Controller;
+use App\Models\AdSpend;
 use App\Models\Domain;
 use App\Services\ClickHouseService;
 use Illuminate\Http\JsonResponse;
@@ -103,6 +104,215 @@ class CampaignsController extends Controller
             LIMIT 200
         ", $goalParams);
 
+        // ── Revenue attribution (cross-session, selectable model) ─────────────
+        // Purchases are stored as `conversions` rows (see ProcessTrackingEvent).
+        // Each order is credited to the campaign touch(es) the visitor had at or
+        // before the purchase. Supported models (?attribution=):
+        //   last_touch  (default) — 100% to the most recent touch
+        //   first_touch           — 100% to the earliest touch
+        //   linear                — split equally across all prior touches
+        //   time_decay            — weight touches by recency (7-day half-life)
+        // Computed in PHP: conversions are low-volume and touches are fetched only
+        // for converting visitors, so this stays bounded. Wrapped in try/catch so
+        // the endpoint works before the conversions table has been migrated.
+        $model = (string) $request->query('attribution', 'last_touch');
+        if (!in_array($model, ['last_touch', 'first_touch', 'linear', 'time_decay'], true)) {
+            $model = 'last_touch';
+        }
+
+        $revenueByKey = [];
+        $totalRevenue = 0.0;
+        $currency = '';
+        try {
+            // De-duplicate orders — a reloaded confirmation page can re-fire.
+            $convs = $this->ch->select("
+                SELECT
+                    order_id,
+                    any(visitor_id)    AS visitor_id,
+                    argMax(value, ts)  AS value,
+                    max(ts)            AS ts
+                FROM conversions
+                WHERE domain_id = {$domainId}
+                  AND ts BETWEEN '{$startDt}' AND '{$endDt}'
+                GROUP BY order_id
+            ");
+
+            // Total revenue is model-independent.
+            foreach ($convs as $c) {
+                $totalRevenue += (float) $c['value'];
+            }
+
+            // Fetch each converting visitor's campaign touches (one per session).
+            $visitorIds = array_values(array_unique(array_filter(
+                array_map(fn($c) => (string) $c['visitor_id'], $convs)
+            )));
+
+            $touchesByVisitor = [];
+            if ($visitorIds) {
+                $inList = implode(',', array_map(fn($v) => "'" . addslashes($v) . "'", $visitorIds));
+                $touchRows = $this->ch->select("
+                    SELECT
+                        visitor_id,
+                        touch_ts,
+                        {$sourceSql} AS source,
+                        {$mediumSql} AS medium,
+                        if(utm_campaign = '', '(none)', utm_campaign) AS campaign
+                    FROM (
+                        SELECT
+                            session_id,
+                            visitor_id,
+                            min(ts) AS touch_ts,
+                            anyIf(utm_source,   utm_source   != '') AS utm_source,
+                            anyIf(utm_medium,   utm_medium   != '') AS utm_medium,
+                            anyIf(utm_campaign, utm_campaign != '') AS utm_campaign,
+                            anyIf(referrer, referrer != '' AND type = 'pageview') AS referrer
+                        FROM events
+                        WHERE domain_id = {$domainId}
+                          AND ts BETWEEN '{$startDt}' AND '{$endDt}'
+                          AND visitor_id IN ({$inList})
+                        GROUP BY session_id, visitor_id
+                    )
+                ");
+                foreach ($touchRows as $t) {
+                    $touchesByVisitor[(string) $t['visitor_id']][] = [
+                        'ts' => strtotime((string) $t['touch_ts']),
+                        'source' => ($t['source'] ?? '') !== '' ? $t['source'] : '(direct)',
+                        'medium' => ($t['medium'] ?? '') !== '' ? $t['medium'] : '(none)',
+                        'campaign' => ($t['campaign'] ?? '') !== '' ? $t['campaign'] : '(none)',
+                    ];
+                }
+            }
+
+            $halfLife = 7 * 86400; // 7-day half-life for time_decay
+
+            foreach ($convs as $c) {
+                $vid = (string) $c['visitor_id'];
+                $value = (float) $c['value'];
+                $convTs = strtotime((string) $c['ts']);
+
+                // Touches at or before the purchase, oldest first.
+                $touches = array_values(array_filter(
+                    $touchesByVisitor[$vid] ?? [],
+                    fn($t) => $t['ts'] !== false && $t['ts'] <= $convTs
+                ));
+                usort($touches, fn($a, $b) => $a['ts'] <=> $b['ts']);
+
+                if (empty($touches)) {
+                    // No tracked touch in window — credit to (direct).
+                    $this->credit($revenueByKey, '(direct)|(none)|(none)', $value, 1.0);
+                    continue;
+                }
+
+                $n = count($touches);
+                $weights = array_fill(0, $n, 0.0);
+                if ($model === 'first_touch') {
+                    $weights[0] = 1.0;
+                } elseif ($model === 'linear') {
+                    foreach ($weights as $i => $_) {
+                        $weights[$i] = 1.0 / $n;
+                    }
+                } elseif ($model === 'time_decay') {
+                    $sum = 0.0;
+                    foreach ($touches as $i => $t) {
+                        $weights[$i] = pow(2, -(($convTs - $t['ts']) / $halfLife));
+                        $sum += $weights[$i];
+                    }
+                    foreach ($weights as $i => $w) {
+                        $weights[$i] = $sum > 0 ? $w / $sum : 1.0 / $n;
+                    }
+                } else { // last_touch
+                    $weights[$n - 1] = 1.0;
+                }
+
+                foreach ($weights as $i => $w) {
+                    if ($w <= 0) {
+                        continue;
+                    }
+                    $t = $touches[$i];
+                    $this->credit($revenueByKey, $t['source'] . '|' . $t['medium'] . '|' . $t['campaign'], $value, $w);
+                }
+            }
+
+            // Dominant currency for display (assumes one currency per domain).
+            $curRow = $this->ch->select("
+                SELECT currency, sum(value) AS v
+                FROM conversions
+                WHERE domain_id = {$domainId}
+                  AND ts BETWEEN '{$startDt}' AND '{$endDt}'
+                  AND currency != ''
+                GROUP BY currency
+                ORDER BY v DESC
+                LIMIT 1
+            ");
+            $currency = $curRow[0]['currency'] ?? '';
+        } catch (\Throwable $e) {
+            // conversions table not migrated yet, or query failed — revenue stays 0.
+            report($e);
+        }
+
+        // Merge revenue into the campaign rows by (source|medium|campaign).
+        foreach ($rows as &$r) {
+            $key = $r['source'] . '|' . $r['medium'] . '|' . $r['campaign'];
+            $r['orders'] = isset($revenueByKey[$key]) ? round($revenueByKey[$key]['orders'], 2) : 0;
+            $r['revenue'] = isset($revenueByKey[$key]) ? round($revenueByKey[$key]['revenue'], 2) : 0;
+            unset($revenueByKey[$key]);
+        }
+        unset($r);
+
+        // Append revenue whose campaign tuple had no sessions in this window
+        // (e.g. a visitor who bought after their campaign session aged out).
+        foreach ($revenueByKey as $key => $rev) {
+            [$src, $med, $camp] = array_pad(explode('|', $key, 3), 3, '');
+            $rows[] = [
+                'source' => $src,
+                'medium' => $med,
+                'campaign' => $camp,
+                'sessions' => 0,
+                'visitors' => 0,
+                'avg_duration' => 0,
+                'avg_pages' => 0,
+                'bounce_rate' => 0,
+                'conversions' => 0,
+                'orders' => round($rev['orders'], 2),
+                'revenue' => round($rev['revenue'], 2),
+                'last_seen' => null,
+            ];
+        }
+
+        // ── Ad spend → ROAS / CPA ─────────────────────────────────────────────
+        // Spend is stored in PostgreSQL (ad_spend table) and matched to campaign
+        // rows by (source, campaign). Wrapped in try/catch so the endpoint works
+        // before the ad_spend migration has run.
+        $spendByKey = [];
+        $totalSpend = 0.0;
+        try {
+            $spendRows = AdSpend::where('domain_id', $domainId)
+                ->whereBetween('date', [$start, $end])
+                ->selectRaw('source, campaign, SUM(spend) AS spend')
+                ->groupBy('source', 'campaign')
+                ->get();
+            foreach ($spendRows as $sp) {
+                $key = $sp->source . '|' . $sp->campaign;
+                $spendByKey[$key] = (float) $sp->spend;
+                $totalSpend += (float) $sp->spend;
+            }
+        } catch (\Throwable $e) {
+            report($e);
+        }
+
+        foreach ($rows as &$r) {
+            $key = $r['source'] . '|' . $r['campaign'];
+            $spend = $spendByKey[$key] ?? 0.0;
+            $revenue = (float) ($r['revenue'] ?? 0);
+            $orders = (int) ($r['orders'] ?? 0);
+            $r['spend'] = round($spend, 2);
+            // ROAS = revenue / spend; CPA = spend / orders. Null when undefined
+            // so the UI can show "—" rather than a misleading 0 or ∞.
+            $r['roas'] = $spend > 0 ? round($revenue / $spend, 2) : null;
+            $r['cpa'] = ($spend > 0 && $orders > 0) ? round($spend / $orders, 2) : null;
+        }
+        unset($r);
+
         // ── Top sources (for chart) ───────────────────────────────────────────
         $sources = $this->ch->select("
             SELECT
@@ -147,8 +357,26 @@ class CampaignsController extends Controller
                 'campaigns' => $rows,
                 'top_sources' => $sources,
                 'trend' => $trend,
+                'total_revenue' => round($totalRevenue, 2),
+                'total_spend' => round($totalSpend, 2),
+                'currency' => $currency,
+                'attribution' => $model,
             ],
         ]);
+    }
+
+    /**
+     * Add weighted credit (orders + revenue) for one attribution touch.
+     *
+     * @param array<string, array{orders: float, revenue: float}> $map
+     */
+    private function credit(array &$map, string $key, float $value, float $weight): void
+    {
+        if (!isset($map[$key])) {
+            $map[$key] = ['orders' => 0.0, 'revenue' => 0.0];
+        }
+        $map[$key]['orders'] += $weight;
+        $map[$key]['revenue'] += $value * $weight;
     }
 
     /**

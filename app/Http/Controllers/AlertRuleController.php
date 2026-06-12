@@ -33,6 +33,7 @@ class AlertRuleController extends Controller
             'operator' => ['sometimes', 'string'],
             'threshold' => ['required'],
             'channel' => ['required', 'string'],
+            'webhook_url' => ['sometimes', 'nullable', 'url', 'max:1024'],
             'is_active' => ['boolean'],
         ]);
 
@@ -45,6 +46,7 @@ class AlertRuleController extends Controller
                 'name' => $data['name'] ?? null,
             ],
             'channel' => $data['channel'],
+            'webhook_url' => $data['webhook_url'] ?? null,
             'is_active' => $data['is_active'] ?? true,
         ]);
 
@@ -61,9 +63,10 @@ class AlertRuleController extends Controller
             ->findOrFail($id);
 
         $data = $request->validate([
-            'type' => ['sometimes', 'in:traffic_drop,error_spike,quota_warning,score_drop'],
+            'type' => ['sometimes', 'in:traffic_drop,traffic_anomaly,error_spike,quota_warning,conversion_drop,score_drop'],
             'threshold' => ['sometimes', 'array'],
-            'channel' => ['sometimes', 'in:in_app,email,both'],
+            'channel' => ['sometimes', 'in:in_app,email,both,slack,discord'],
+            'webhook_url' => ['sometimes', 'nullable', 'url', 'max:1024'],
             'is_active' => ['sometimes', 'boolean'],
         ]);
 

@@ -23,6 +23,9 @@ use App\Http\Controllers\Analytics\StatsController;
 use App\Http\Controllers\Analytics\VisitorController;
 use App\Http\Controllers\Analytics\BotStatsController;
 use App\Http\Controllers\Analytics\CampaignsController;
+use App\Http\Controllers\Analytics\AdSpendController;
+use App\Http\Controllers\Analytics\RetentionController;
+use App\Http\Controllers\Analytics\ExperimentController;
 use App\Http\Controllers\Analytics\EngagedVisitorsController;
 use App\Http\Controllers\Analytics\SummaryController;
 use App\Http\Controllers\BillingController;
@@ -389,6 +392,15 @@ Route::prefix('v1')->middleware('api.key')->group(function () {
             Route::get('visitors', [VisitorController::class, 'index'])->name('visitors');
             Route::get('visitors/{visitorId}', [VisitorController::class, 'show'])->name('visitors.show');
             Route::get('campaigns', CampaignsController::class)->name('campaigns');
+            Route::get('retention', RetentionController::class)->name('retention');
+            Route::get('experiments', [ExperimentController::class, 'index'])->name('experiments.index');
+            Route::post('experiments', [ExperimentController::class, 'store'])->name('experiments.store');
+            Route::get('experiments/{id}/results', [ExperimentController::class, 'results'])->name('experiments.results');
+            Route::delete('experiments/{id}', [ExperimentController::class, 'destroy'])->name('experiments.destroy');
+            Route::get('ad-spend', [AdSpendController::class, 'index'])->name('ad-spend.index');
+            Route::post('ad-spend', [AdSpendController::class, 'store'])->name('ad-spend.store');
+            Route::post('ad-spend/import', [AdSpendController::class, 'import'])->name('ad-spend.import');
+            Route::delete('ad-spend/{id}', [AdSpendController::class, 'destroy'])->name('ad-spend.destroy');
             Route::get('engaged-visitors', EngagedVisitorsController::class)->name('engaged-visitors');
             Route::get('summary', SummaryController::class)->name('summary');
             Route::get('bot-stats', BotStatsController::class)->name('bot-stats');
@@ -430,17 +442,14 @@ Route::prefix('v1')->middleware('api.key')->group(function () {
 
         /*
         |--------------------------------------------------------------------------
-        | Session Replay stubs (Phase 2)
-        |--------------------------------------------------------------------------
-        */
-        /*
-        |--------------------------------------------------------------------------
-        | Session Replay
+        | Session Replay (enabled via data-replay="true" on the tracker snippet)
         |--------------------------------------------------------------------------
         */
         Route::prefix('replay/{domainId}')->name('replay.')->group(function () {
             Route::get('sessions', [ReplayController::class, 'sessions'])->name('sessions');
+            Route::get('funnel-drops', [ReplayController::class, 'funnelDrops'])->name('funnel-drops');
             Route::get('sessions/{sessionId}', [ReplayController::class, 'events'])->name('events');
+            Route::get('sessions/{sessionId}/markers', [ReplayController::class, 'markers'])->name('markers');
             Route::delete('sessions/{sessionId}', [ReplayController::class, 'destroy'])->name('destroy');
         });
 

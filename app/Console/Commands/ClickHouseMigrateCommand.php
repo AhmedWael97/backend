@@ -15,7 +15,7 @@ class ClickHouseMigrateCommand extends Command
     {
         if ($this->option('fresh')) {
             $this->warn('Dropping all ClickHouse tables...');
-            foreach (['replay_events', 'custom_events', 'ux_events', 'pipeline_events', 'sessions', 'events'] as $table) {
+            foreach (['conversions', 'replay_events', 'custom_events', 'ux_events', 'pipeline_events', 'sessions', 'events'] as $table) {
                 $ch->statement("DROP TABLE IF EXISTS {$table}");
                 $this->line("  Dropped {$table}");
             }
@@ -155,6 +155,28 @@ class ClickHouseMigrateCommand extends Command
                 ) ENGINE = MergeTree()
                 PARTITION BY toYYYYMM(ts)
                 ORDER BY (domain_id, name, ts)
+                TTL ts + INTERVAL 365 DAY
+                SETTINGS index_granularity = 8192
+            ",
+
+            // Revenue conversions (purchase-style events). ReplacingMergeTree keyed
+            // by (domain_id, order_id) so a reloaded order-confirmation page that
+            // re-fires the same purchase collapses to a single row. Distinct orders
+            // (and synthetic ids for purchases sent without an order_id) are kept.
+            'conversions' => "
+                CREATE TABLE IF NOT EXISTS conversions (
+                    domain_id   UInt32,
+                    order_id    String,
+                    session_id  String,
+                    visitor_id  String,
+                    value       Float64,
+                    currency    LowCardinality(String),
+                    name        LowCardinality(String),
+                    url         String,
+                    ts          DateTime DEFAULT now()
+                ) ENGINE = ReplacingMergeTree(ts)
+                PARTITION BY toYYYYMM(ts)
+                ORDER BY (domain_id, order_id)
                 TTL ts + INTERVAL 365 DAY
                 SETTINGS index_granularity = 8192
             ",

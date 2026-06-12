@@ -14,6 +14,7 @@ Artisan::command('inspire', function () {
 |--------------------------------------------------------------------------
 */
 Schedule::command('eye:analyze')->hourly();
+Schedule::command('eye:check-alerts')->everyFifteenMinutes();
 Schedule::command('eye:cleanup-events')->dailyAt('02:00');
 Schedule::command('eye:cleanup-exports')->hourly();
 Schedule::command('eye:cleanup-tokens')->hourly();

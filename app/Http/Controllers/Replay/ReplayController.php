@@ -130,6 +130,128 @@ class ReplayController extends Controller
         return $this->success($events);
     }
 
+    /**
+     * Return "notable" UX events for a session so the player can overlay markers
+     * on the timeline (rage clicks, dead clicks, JS errors, etc.).
+     *
+     * Timestamps are server-side (ux_events.created_at) while the rrweb timeline
+     * is client-side, so the player positions markers by their relative fraction
+     * within this list's own time span — approximate, but good enough to jump to
+     * the rough moment something went wrong.
+     */
+    public function markers(Request $request, int $domainId, string $sessionId): JsonResponse
+    {
+        $user = $request->user();
+        $domain = Domain::where('id', $domainId)
+            ->when(!$user->isSuperAdmin(), fn($q) => $q->where('user_id', $user->id))
+            ->firstOrFail();
+
+        SessionReplay::where('domain_id', $domain->id)
+            ->where('session_id', $sessionId)
+            ->firstOrFail();
+
+        $safeSession = addslashes($sessionId);
+
+        // Only friction / error signals — not every click/scroll (too noisy).
+        $notable = "'rage_click','dead_click','js_error','excessive_scroll','quick_back','form_abandon','broken_link'";
+
+        $rows = $this->clickhouse->select("
+            SELECT
+                type,
+                url,
+                element_selector,
+                details,
+                toUnixTimestamp(created_at) * 1000 AS ts_ms
+            FROM ux_events
+            WHERE domain_id = {$domain->id}
+              AND session_id = '{$safeSession}'
+              AND type IN ({$notable})
+            ORDER BY created_at ASC, type ASC
+            LIMIT 500
+        ");
+
+        return $this->success($rows);
+    }
+
+    /**
+     * List replayable sessions that DROPPED at a given funnel step — i.e. reached
+     * step N but never any later step. Powers the "watch drop-offs" link on the
+     * funnels page. Returns the same shape as sessions().
+     *
+     * GET /api/replay/{domainId}/funnel-drops?pipeline_id=&step_order=&from=&to=
+     */
+    public function funnelDrops(Request $request, int $domainId): JsonResponse
+    {
+        $user = $request->user();
+        $domain = Domain::where('id', $domainId)
+            ->when(!$user->isSuperAdmin(), fn($q) => $q->where('user_id', $user->id))
+            ->firstOrFail();
+
+        $pipelineId = (int) $request->query('pipeline_id', 0);
+        $stepOrder = (int) $request->query('step_order', 0);
+        if ($pipelineId <= 0) {
+            return $this->error('pipeline_id is required.', 422);
+        }
+
+        $from = $request->query('from', now()->subDays(30)->format('Y-m-d'));
+        $to = $request->query('to', now()->format('Y-m-d'));
+
+        // pipeline_events schema varies across deployments — detect columns first
+        // (mirrors AnalyticsQueryService::pipelineFunnel).
+        $cols = [];
+        foreach ($this->clickhouse->select(
+            "SELECT name FROM system.columns WHERE database = currentDatabase() AND table = 'pipeline_events'"
+        ) as $c) {
+            $name = (string) ($c['name'] ?? '');
+            if ($name !== '') {
+                $cols[$name] = true;
+            }
+        }
+        if (!isset($cols['step_order'])) {
+            return $this->success([]); // no ordering column → can't compute per-step drop
+        }
+        $timeCol = isset($cols['ts']) ? 'ts' : (isset($cols['event_time']) ? 'event_time' : null);
+        $timeFilter = $timeCol
+            ? "AND {$timeCol} >= '{$from} 00:00:00' AND {$timeCol} < '{$to} 23:59:59'"
+            : '';
+
+        $sessionRows = $this->clickhouse->select("
+            SELECT DISTINCT session_id
+            FROM pipeline_events
+            WHERE domain_id = {$domain->id}
+              AND pipeline_id = {$pipelineId}
+              AND step_order = {$stepOrder}
+              {$timeFilter}
+              AND session_id NOT IN (
+                  SELECT session_id
+                  FROM pipeline_events
+                  WHERE domain_id = {$domain->id}
+                    AND pipeline_id = {$pipelineId}
+                    AND step_order > {$stepOrder}
+                    {$timeFilter}
+              )
+            LIMIT 1000
+        ");
+
+        $sessionIds = array_values(array_filter(
+            array_map(fn($r) => (string) ($r['session_id'] ?? ''), $sessionRows)
+        ));
+        if (empty($sessionIds)) {
+            return $this->success([]);
+        }
+
+        // Only sessions that actually have a playable recording.
+        $replays = SessionReplay::where('domain_id', $domain->id)
+            ->whereIn('session_id', $sessionIds)
+            ->where('status', '!=', 'pruned')
+            ->where('event_count', '>=', 10)
+            ->orderByDesc('recorded_at')
+            ->limit(200)
+            ->get();
+
+        return $this->success($replays);
+    }
+
     /** Delete a replay recording (GDPR / manual cleanup). */
     public function destroy(Request $request, int $domainId, string $sessionId): JsonResponse
     {
