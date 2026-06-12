@@ -1,6 +1,7 @@
 <?php
 
 use Illuminate\Auth\AuthenticationException;
+use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
@@ -54,19 +55,27 @@ return Application::configure(basePath: dirname(__DIR__))
             return $apiResponse(401, 'Unauthenticated.', null);
         });
 
+        // A missing record (e.g. firstOrFail / route-model binding) is a 404,
+        // not a 500 — and never leak the model class name to the client.
+        $exceptions->render(function (ModelNotFoundException $e, Request $request) use ($apiResponse) {
+            if ($request->is('api/*')) {
+                return $apiResponse(404, 'Resource not found.', null);
+            }
+        });
+
         $exceptions->render(function (HttpException $e, Request $request) use ($apiResponse) {
             if ($request->is('api/*')) {
-                return $apiResponse($e->getStatusCode(), $e->getMessage() ?: 'HTTP error.', null);
+                return $apiResponse($e->getStatusCode(), $e->getMessage() ?: 'Resource not found.', null);
             }
         });
 
         $exceptions->render(function (Throwable $e, Request $request) use ($apiResponse) {
             if ($request->is('api/*')) {
-                $statusCode = 500;
+                // Only expose internals when debugging; production gets a clean message.
                 $message = config('app.debug')
                     ? $e->getMessage() . ' [' . get_class($e) . ']'
-                    : $e->getMessage() . ' [' . get_class($e) . ']';
-                return $apiResponse($statusCode, $message, null);
+                    : 'Something went wrong.';
+                return $apiResponse(500, $message, null);
             }
         });
 
