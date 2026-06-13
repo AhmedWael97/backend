@@ -19,6 +19,53 @@ class AlertRuleController extends Controller
         return $this->success(AlertRule::where('domain_id', $domain->id)->get());
     }
 
+    /**
+     * Apply a sensible set of default alert rules to EVERY domain the user owns
+     * that doesn't already have a rule of that type. Saves setting them up 20×.
+     *
+     * POST /api/v1/alert-rules/apply-defaults  { channel?: string }
+     */
+    public function applyDefaults(Request $request): JsonResponse
+    {
+        $user = $request->user();
+        $channel = (string) $request->input('channel', 'email');
+        if (!in_array($channel, ['in_app', 'email', 'both'], true)) {
+            $channel = 'email';
+        }
+
+        $domains = $user->isSuperAdmin()
+            ? Domain::query()->get(['id'])
+            : $user->domains()->get(['id']);
+
+        $defaults = [
+            ['type' => 'traffic_anomaly', 'threshold' => ['sensitivity' => 2.5]],
+            ['type' => 'conversion_drop', 'threshold' => ['percent' => 30]],
+            ['type' => 'error_spike', 'threshold' => ['percent' => 5]],
+        ];
+
+        $created = 0;
+        foreach ($domains as $domain) {
+            foreach ($defaults as $def) {
+                $exists = AlertRule::where('domain_id', $domain->id)
+                    ->where('type', $def['type'])
+                    ->exists();
+                if ($exists) {
+                    continue;
+                }
+                AlertRule::create([
+                    'domain_id' => $domain->id,
+                    'type' => $def['type'],
+                    'threshold' => $def['threshold'],
+                    'channel' => $channel,
+                    'is_active' => true,
+                ]);
+                $created++;
+            }
+        }
+
+        return $this->success(['created' => $created, 'domains' => $domains->count()]);
+    }
+
     public function store(Request $request, int $domainId): JsonResponse
     {
         $user = $request->user();

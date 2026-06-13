@@ -26,6 +26,7 @@ use App\Http\Controllers\Analytics\CampaignsController;
 use App\Http\Controllers\Analytics\AdSpendController;
 use App\Http\Controllers\Analytics\RetentionController;
 use App\Http\Controllers\Analytics\ExperimentController;
+use App\Http\Controllers\Analytics\PortfolioController;
 use App\Http\Controllers\Analytics\EngagedVisitorsController;
 use App\Http\Controllers\Analytics\SummaryController;
 use App\Http\Controllers\BillingController;
@@ -184,6 +185,15 @@ Route::prefix('v1')->middleware('api.key')->group(function () {
     |--------------------------------------------------------------------------
     */
     Route::middleware('auth:sanctum')->group(function () {
+
+        // Cross-site portfolio (user-scoped, spans all the user's domains)
+        Route::prefix('portfolio')->name('portfolio.')->group(function () {
+            Route::get('overview', [PortfolioController::class, 'overview'])->name('overview');
+            Route::get('triage', [PortfolioController::class, 'triage'])->name('triage');
+        });
+
+        // Bulk-apply recommended alert rules to all the user's domains.
+        Route::post('alert-rules/apply-defaults', [AlertRuleController::class, 'applyDefaults'])->name('alert-rules.apply-defaults');
 
         // Auth session
         Route::get('auth/me', [ProfileController::class, 'show'])->name('auth.me');
