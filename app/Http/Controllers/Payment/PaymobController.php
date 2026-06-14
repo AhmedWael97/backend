@@ -33,7 +33,44 @@ use Illuminate\Support\Facades\Log;
  */
 class PaymobController extends Controller
 {
-    private const BASE_URL = 'https://accept.paymob.com/api';
+    private const DEFAULT_BASE_URL = 'https://accept.paymob.com/api';
+
+    /**
+     * Resolve the active Paymob credentials, honouring the test/production
+     * environment selected in the super-admin dashboard.
+     *
+     * config shape (payment_methods.config):
+     *   { "mode": "test"|"production",
+     *     "test":       { api_key, secret_key, public_key, integration_id, iframe_id, hmac_secret, base_url? },
+     *     "production":  { … } }
+     *
+     * Resolution priority per field: active-mode DB config → flat/legacy DB
+     * config → PAYMOB_* env. So old flat configs and env still work.
+     *
+     * @return array{method: ?PaymentMethod, mode: string, base_url: string, api_key: string, integration_id: int, iframe_id: string, hmac_secret: string}
+     */
+    private function resolvePaymobConfig(): array
+    {
+        $method = PaymentMethod::where('type', 'paymob')->where('is_active', true)->first();
+        $cfg = (array) ($method?->config ?? []);
+
+        $mode = in_array(($cfg['mode'] ?? null), ['test', 'production'], true) ? $cfg['mode'] : 'test';
+        $modeCfg = is_array($cfg[$mode] ?? null) ? $cfg[$mode] : [];
+
+        $pick = fn(string $key, string $envKey) => $modeCfg[$key] ?? $cfg[$key] ?? config("services.paymob.{$envKey}");
+
+        $baseUrl = (string) ($modeCfg['base_url'] ?? $cfg['base_url'] ?? config('services.paymob.base_url') ?: self::DEFAULT_BASE_URL);
+
+        return [
+            'method' => $method,
+            'mode' => $mode,
+            'base_url' => rtrim($baseUrl, '/'),
+            'api_key' => (string) $pick('api_key', 'api_key'),
+            'integration_id' => (int) $pick('integration_id', 'integration_id'),
+            'iframe_id' => (string) $pick('iframe_id', 'iframe_id'),
+            'hmac_secret' => (string) $pick('hmac_secret', 'hmac_secret'),
+        ];
+    }
 
     // ── Step 1-3: Initiate payment ─────────────────────────────────────────
 
@@ -48,18 +85,19 @@ class PaymobController extends Controller
             'plan_id' => ['required', 'integer', 'exists:plans,id'],
         ]);
 
-        // Resolve credentials: DB config (set by admin) takes priority, .env is the fallback.
-        $paymobMethod = PaymentMethod::where('type', 'paymob')->where('is_active', true)->first();
+        // Resolve credentials for the active environment (test/production) set in
+        // the super-admin dashboard; .env is the fallback.
+        $cfg = $this->resolvePaymobConfig();
+        $paymobMethod = $cfg['method'];
 
         if (!$paymobMethod) {
             return $this->error('Paymob payment is not enabled. Please contact support.', 503);
         }
 
-        $dbConfig = $paymobMethod->config ?? [];
-
-        $apiKey = (string) ($dbConfig['api_key'] ?? config('services.paymob.api_key', ''));
-        $integrationId = (int) ($dbConfig['integration_id'] ?? config('services.paymob.integration_id', 0));
-        $iframeId = (string) ($dbConfig['iframe_id'] ?? config('services.paymob.iframe_id', ''));
+        $apiKey = $cfg['api_key'];
+        $integrationId = $cfg['integration_id'];
+        $iframeId = $cfg['iframe_id'];
+        $baseUrl = $cfg['base_url'];
 
         if (!$apiKey || !$integrationId || !$iframeId) {
             return $this->error('Paymob is not fully configured. Please contact support.', 503);
@@ -69,7 +107,7 @@ class PaymobController extends Controller
         $plan = Plan::findOrFail($request->input('plan_id'));
 
         // ── 1. Auth token ──────────────────────────────────────────────────
-        $authRes = Http::timeout(15)->post(self::BASE_URL . '/auth/tokens', [
+        $authRes = Http::timeout(15)->post($baseUrl . '/auth/tokens', [
             'api_key' => $apiKey,
         ]);
 
@@ -86,7 +124,7 @@ class PaymobController extends Controller
         // ── 2. Create order ────────────────────────────────────────────────
         $amountCents = (int) round((float) ($plan->price_monthly ?? 0) * 100);
 
-        $orderRes = Http::timeout(15)->post(self::BASE_URL . '/ecommerce/orders', [
+        $orderRes = Http::timeout(15)->post($baseUrl . '/ecommerce/orders', [
             'auth_token' => $authToken,
             'delivery_needed' => false,
             'amount_cents' => $amountCents,
@@ -113,7 +151,7 @@ class PaymobController extends Controller
         }
 
         // ── 3. Payment key ─────────────────────────────────────────────────
-        $keyRes = Http::timeout(15)->post(self::BASE_URL . '/acceptance/payment_keys', [
+        $keyRes = Http::timeout(15)->post($baseUrl . '/acceptance/payment_keys', [
             'auth_token' => $authToken,
             'amount_cents' => $amountCents,
             'expiration' => 3600,
@@ -160,11 +198,12 @@ class PaymobController extends Controller
             'metadata' => [
                 'paymob_order_id' => $orderId,
                 'paymob_iframe_id' => $iframeId,
+                'paymob_mode' => $cfg['mode'],
                 'plan_id' => $plan->id,
             ],
         ]);
 
-        $iframeUrl = "https://accept.paymob.com/api/acceptance/iframes/{$iframeId}?payment_token={$paymentKey}";
+        $iframeUrl = "{$baseUrl}/acceptance/iframes/{$iframeId}?payment_token={$paymentKey}";
 
         return $this->success([
             'iframe_url' => $iframeUrl,
@@ -185,10 +224,8 @@ class PaymobController extends Controller
      */
     public function webhook(Request $request): \Illuminate\Http\Response
     {
-        // Resolve HMAC secret: DB config first, .env fallback.
-        $paymobMethod = PaymentMethod::where('type', 'paymob')->where('is_active', true)->first();
-        $dbConfig = $paymobMethod?->config ?? [];
-        $hmacSecret = (string) ($dbConfig['hmac_secret'] ?? config('services.paymob.hmac_secret', ''));
+        // Resolve HMAC secret for the active environment (DB first, .env fallback).
+        $hmacSecret = $this->resolvePaymobConfig()['hmac_secret'];
 
         $payload = $request->all();
 

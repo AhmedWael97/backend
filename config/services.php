@@ -67,6 +67,8 @@ return [
         'integration_id' => env('PAYMOB_INTEGRATION_ID'),
         'iframe_id' => env('PAYMOB_IFRAME_ID'),
         'hmac_secret' => env('PAYMOB_HMAC_SECRET'),
+        // Optional base URL override (region/mode). Default: accept.paymob.com.
+        'base_url' => env('PAYMOB_BASE_URL', 'https://accept.paymob.com/api'),
     ],
 
     // GrowthBook (self-hosted or cloud) — experiment engine + rigorous stats.

@@ -20,7 +20,7 @@ class AdminPaymentMethodController extends Controller
         $data = $request->validate([
             'name' => ['required', 'string', 'max:100'],
             'name_ar' => ['nullable', 'string', 'max:100'],
-            'type' => ['required', 'in:stripe,paypal,manual,bank_transfer,paymob'],
+            'type' => ['required', 'in:paymob,bank_transfer'],
             'config' => ['nullable', 'array'],
             'is_active' => ['boolean'],
         ]);
@@ -45,7 +45,7 @@ class AdminPaymentMethodController extends Controller
         $data = $request->validate([
             'name' => ['sometimes', 'string', 'max:100'],
             'name_ar' => ['nullable', 'string', 'max:100'],
-            'type' => ['sometimes', 'in:stripe,paypal,manual,bank_transfer,paymob'],
+            'type' => ['sometimes', 'in:paymob,bank_transfer'],
             'config' => ['nullable', 'array'],
             'is_active' => ['sometimes', 'boolean'],
         ]);
