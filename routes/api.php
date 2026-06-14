@@ -405,6 +405,10 @@ Route::prefix('v1')->middleware('api.key')->group(function () {
             Route::get('retention', RetentionController::class)->name('retention');
             Route::get('experiments', [ExperimentController::class, 'index'])->name('experiments.index');
             Route::post('experiments', [ExperimentController::class, 'store'])->name('experiments.store');
+            // GrowthBook-backed experiments (registered before the {id} routes).
+            Route::get('experiments/growthbook/status', [ExperimentController::class, 'growthbookStatus'])->name('experiments.gb.status');
+            Route::get('experiments/growthbook', [ExperimentController::class, 'growthbookList'])->name('experiments.gb.list');
+            Route::get('experiments/growthbook/{id}/results', [ExperimentController::class, 'growthbookResults'])->name('experiments.gb.results');
             Route::get('experiments/{id}/results', [ExperimentController::class, 'results'])->name('experiments.results');
             Route::delete('experiments/{id}', [ExperimentController::class, 'destroy'])->name('experiments.destroy');
             Route::get('ad-spend', [AdSpendController::class, 'index'])->name('ad-spend.index');

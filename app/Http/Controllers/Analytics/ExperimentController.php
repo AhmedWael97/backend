@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Domain;
 use App\Models\Experiment;
 use App\Services\ClickHouseService;
+use App\Services\GrowthBookService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -22,8 +23,104 @@ use Illuminate\Http\Request;
  */
 class ExperimentController extends Controller
 {
-    public function __construct(private ClickHouseService $ch)
+    public function __construct(
+        private ClickHouseService $ch,
+        private GrowthBookService $growthbook,
+    ) {
+    }
+
+    // ── GrowthBook integration ────────────────────────────────────────────────
+    // GrowthBook owns assignment + rigorous stats; EYE overlays its own revenue
+    // (matched by the experiment's trackingKey to our exposure events).
+
+    public function growthbookStatus(Request $request, int $domainId): JsonResponse
     {
+        $this->authorizeDomain($request, $domainId);
+        return $this->success([
+            'connected' => $this->growthbook->isConfigured(),
+            'host' => rtrim((string) config('services.growthbook.api_host'), '/') ?: null,
+        ]);
+    }
+
+    public function growthbookList(Request $request, int $domainId): JsonResponse
+    {
+        $this->authorizeDomain($request, $domainId);
+        $experiments = $this->growthbook->listExperiments($request->query('project'));
+        $out = array_map(fn($e) => [
+            'id' => $e['id'] ?? null,
+            'name' => $e['name'] ?? ($e['trackingKey'] ?? 'Experiment'),
+            'trackingKey' => $e['trackingKey'] ?? null,
+            'status' => $e['status'] ?? null,
+            'variations' => array_map(fn($v) => $v['key'] ?? $v['name'] ?? '', $e['variations'] ?? []),
+        ], $experiments);
+
+        return $this->success([
+            'connected' => $this->growthbook->isConfigured(),
+            'experiments' => $out,
+        ]);
+    }
+
+    public function growthbookResults(Request $request, int $domainId, string $id): JsonResponse
+    {
+        $domain = $this->authorizeDomain($request, $domainId);
+        $domainId = (int) $domain->id;
+
+        $experiment = $this->growthbook->experiment($id);
+        $results = $this->growthbook->results($id);
+        $key = $experiment['trackingKey'] ?? '';
+        $revenue = $key !== '' ? $this->revenueByVariant($domainId, $key) : [];
+
+        return $this->success([
+            'experiment' => $experiment,
+            'growthbook_results' => $results,
+            'revenue' => $revenue,
+        ]);
+    }
+
+    /**
+     * EYE revenue overlay per variant for an experiment trackingKey, using the
+     * exposure events (custom_events name='experiment') joined to conversions.
+     *
+     * @return array<string, array{converters:int,orders:int,revenue:float}>
+     */
+    private function revenueByVariant(int $domainId, string $key): array
+    {
+        $safeKey = addslashes($key);
+        $expCte = "
+            SELECT visitor_id, argMin(JSONExtractString(props, 'variant'), ts) AS variant
+            FROM custom_events
+            WHERE domain_id = {$domainId}
+              AND name = 'experiment'
+              AND JSONExtractString(props, 'exp') = '{$safeKey}'
+            GROUP BY visitor_id
+        ";
+
+        $out = [];
+        try {
+            $rows = $this->ch->select("
+                SELECT
+                    e.variant            AS variant,
+                    uniq(c.visitor_id)   AS converters,
+                    uniqExact(c.order_id) AS orders,
+                    round(sum(c.value), 2) AS revenue
+                FROM ({$expCte}) AS e
+                INNER JOIN (
+                    SELECT order_id, any(visitor_id) AS visitor_id, argMax(value, ts) AS value
+                    FROM conversions WHERE domain_id = {$domainId} GROUP BY order_id
+                ) AS c ON e.visitor_id = c.visitor_id
+                GROUP BY variant
+            ");
+            foreach ($rows as $r) {
+                $out[(string) $r['variant']] = [
+                    'converters' => (int) $r['converters'],
+                    'orders' => (int) $r['orders'],
+                    'revenue' => (float) $r['revenue'],
+                ];
+            }
+        } catch (\Throwable $e) {
+            report($e);
+        }
+        return $out;
     }
 
     public function index(Request $request, int $domainId): JsonResponse

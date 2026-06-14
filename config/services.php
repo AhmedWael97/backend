@@ -69,4 +69,11 @@ return [
         'hmac_secret' => env('PAYMOB_HMAC_SECRET'),
     ],
 
+    // GrowthBook (self-hosted or cloud) — experiment engine + rigorous stats.
+    // EYE pulls experiments/results via the REST API and overlays its own revenue.
+    'growthbook' => [
+        'api_host' => env('GROWTHBOOK_API_HOST'),   // e.g. https://growthbook.your-domain.com
+        'api_key' => env('GROWTHBOOK_API_KEY'),     // a GrowthBook REST API secret key
+    ],
+
 ];
