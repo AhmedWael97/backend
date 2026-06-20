@@ -125,6 +125,11 @@ Route::prefix('v1')->middleware('api.key')->group(function () {
         ->withoutMiddleware('api.key')
         ->middleware('throttle:60,1');
 
+    // A/B experiments config — public (the eye-ab.js tracker fetches running tests).
+    Route::get('experiments/active', [ExperimentController::class, 'active'])
+        ->name('experiments.active')->withoutMiddleware('api.key')->middleware('throttle:600,1');
+    Route::options('experiments/active', CorsPreflightController::class)->withoutMiddleware('api.key');
+
     // Outreach unsubscribe (clicked from email) + Mailgun events — public.
     Route::get('outreach/unsubscribe/{token}', [OutreachController::class, 'unsubscribe'])
         ->name('outreach.unsubscribe')->withoutMiddleware('api.key');
@@ -440,6 +445,7 @@ Route::prefix('v1')->middleware('api.key')->group(function () {
             Route::get('experiments/convert', [ExperimentController::class, 'convertList'])->name('experiments.convert.list');
             Route::get('experiments/convert/{id}/results', [ExperimentController::class, 'convertResults'])->name('experiments.convert.results');
             Route::get('experiments/{id}/results', [ExperimentController::class, 'results'])->name('experiments.results');
+            Route::put('experiments/{id}', [ExperimentController::class, 'update'])->name('experiments.update');
             Route::delete('experiments/{id}', [ExperimentController::class, 'destroy'])->name('experiments.destroy');
             Route::get('ad-spend', [AdSpendController::class, 'index'])->name('ad-spend.index');
             Route::post('ad-spend', [AdSpendController::class, 'store'])->name('ad-spend.store');

@@ -178,34 +178,51 @@ class ExperimentController extends Controller
     {
         $domain = $this->authorizeDomain($request, $domainId);
         return $this->success(
-            Experiment::where('domain_id', $domain->id)->orderByDesc('created_at')->get()
+            Experiment::where('domain_id', $domain->id)->with('variations')->orderByDesc('created_at')->get()
         );
     }
 
     public function store(Request $request, int $domainId): JsonResponse
     {
         $domain = $this->authorizeDomain($request, $domainId);
-
-        $data = $request->validate([
-            'key' => ['required', 'string', 'max:64', 'regex:/^[A-Za-z0-9_\-]+$/'],
-            'name' => ['required', 'string', 'max:200'],
-            'variants' => ['required', 'array', 'min:2', 'max:6'],
-            'variants.*' => ['required', 'string', 'max:64'],
-        ]);
-
-        if (Experiment::where('domain_id', $domain->id)->where('key', $data['key'])->exists()) {
-            return $this->error('An experiment with that key already exists.', 422);
-        }
+        $data = $this->validateBuilder($request, true);
 
         $experiment = Experiment::create([
             'domain_id' => $domain->id,
-            'key' => $data['key'],
+            'key' => $this->uniqueKey($domain->id, $data['name']),
             'name' => $data['name'],
-            'variants' => array_values($data['variants']),
+            'type' => $data['type'],
+            'target_url' => $data['target_url'],
+            'goal_type' => $data['goal_type'],
+            'goal_value' => $data['goal_value'] ?? null,
+            'status' => 'draft',
             'is_active' => true,
+            'variants' => [],
         ]);
+        $this->syncVariations($experiment, $data['variations']);
 
-        return $this->success($experiment, 201);
+        return $this->success($experiment->load('variations'), 201);
+    }
+
+    public function update(Request $request, int $domainId, int $id): JsonResponse
+    {
+        $domain = $this->authorizeDomain($request, $domainId);
+        $experiment = Experiment::where('domain_id', $domain->id)->where('id', $id)->firstOrFail();
+        $data = $this->validateBuilder($request, false);
+
+        $experiment->update(array_filter([
+            'name' => $data['name'] ?? null,
+            'target_url' => $data['target_url'] ?? null,
+            'goal_type' => $data['goal_type'] ?? null,
+            'goal_value' => $data['goal_value'] ?? null,
+            'status' => $data['status'] ?? null,
+        ], fn($v) => $v !== null));
+
+        if (isset($data['variations'])) {
+            $this->syncVariations($experiment, $data['variations']);
+        }
+
+        return $this->success($experiment->fresh()->load('variations'));
     }
 
     public function destroy(Request $request, int $domainId, int $id): JsonResponse
@@ -215,15 +232,53 @@ class ExperimentController extends Controller
         return $this->success(['deleted' => true]);
     }
 
+    /**
+     * Public — the tracker (eye-ab.js) fetches running experiments to apply.
+     * GET /api/v1/experiments/active?t=token
+     */
+    public function active(Request $request): JsonResponse
+    {
+        $cors = ['Access-Control-Allow-Origin' => '*'];
+        $token = $request->query('t') ?? $request->header('X-Eye-Token');
+        $domain = $token
+            ? Domain::where(function ($q) use ($token) {
+                $q->where('script_token', $token)->orWhere('previous_script_token', $token);
+            })->where('active', true)->first()
+            : null;
+
+        if (!$domain) {
+            return $this->success(['experiments' => []])->withHeaders($cors);
+        }
+
+        $experiments = Experiment::where('domain_id', $domain->id)
+            ->where('status', 'running')->with('variations')->get();
+
+        $out = $experiments->map(fn($e) => [
+            'key' => $e->key,
+            'type' => $e->type,
+            'target_url' => $e->target_url,
+            'variations' => $e->variations->map(fn($v) => [
+                'key' => $v->vkey,
+                'weight' => $v->weight,
+                'is_control' => $v->is_control,
+                'js' => $v->js_code,
+                'css' => $v->css_code,
+                'redirect' => $v->redirect_url,
+            ])->values(),
+        ])->values();
+
+        return $this->success(['experiments' => $out])->withHeaders($cors);
+    }
+
     public function results(Request $request, int $domainId, int $id): JsonResponse
     {
         $domain = $this->authorizeDomain($request, $domainId);
         $domainId = (int) $domain->id;
-        $experiment = Experiment::where('domain_id', $domainId)->where('id', $id)->firstOrFail();
+        $experiment = Experiment::where('domain_id', $domainId)->where('id', $id)->with('variations')->firstOrFail();
 
         $safeKey = addslashes($experiment->key);
 
-        // Each visitor's variant = the one at their FIRST exposure (stable assignment).
+        // Stable assignment: each visitor's variant = the one at their first exposure.
         $expCte = "
             SELECT visitor_id, argMin(JSONExtractString(props, 'variant'), ts) AS variant
             FROM custom_events
@@ -233,86 +288,123 @@ class ExperimentController extends Controller
             GROUP BY visitor_id
         ";
 
-        $visRows = $this->ch->select("SELECT variant, uniq(visitor_id) AS visitors FROM ({$expCte}) GROUP BY variant");
+        // Goal: which exposed visitors "converted" (purchase | event | url).
+        $goalVal = addslashes((string) $experiment->goal_value);
+        if ($experiment->goal_type === 'event' && $goalVal !== '') {
+            $goalCte = "SELECT DISTINCT visitor_id FROM custom_events WHERE domain_id = {$domainId} AND name = '{$goalVal}'";
+        } elseif ($experiment->goal_type === 'url' && $goalVal !== '') {
+            $goalCte = "SELECT DISTINCT visitor_id FROM events WHERE domain_id = {$domainId} AND type = 'pageview' AND url LIKE '%{$goalVal}%'";
+        } else {
+            $goalCte = "SELECT DISTINCT visitor_id FROM conversions WHERE domain_id = {$domainId}";
+        }
+
         $visitorsByVariant = [];
-        foreach ($visRows as $r) {
-            $visitorsByVariant[(string) $r['variant']] = (int) $r['visitors'];
-        }
-
-        // Conversions by exposed visitor → orders / revenue / converters per variant.
         $convByVariant = [];
-        $currency = '';
         try {
-            $convRows = $this->ch->select("
-                SELECT
-                    e.variant            AS variant,
-                    uniq(c.visitor_id)   AS converters,
-                    uniqExact(c.order_id) AS orders,
-                    round(sum(c.value), 2) AS revenue
-                FROM ({$expCte}) AS e
-                INNER JOIN (
-                    SELECT order_id, any(visitor_id) AS visitor_id, argMax(value, ts) AS value
-                    FROM conversions
-                    WHERE domain_id = {$domainId}
-                    GROUP BY order_id
-                ) AS c ON e.visitor_id = c.visitor_id
-                GROUP BY variant
-            ");
-            foreach ($convRows as $r) {
-                $convByVariant[(string) $r['variant']] = [
-                    'converters' => (int) $r['converters'],
-                    'orders' => (int) $r['orders'],
-                    'revenue' => (float) $r['revenue'],
-                ];
+            foreach ($this->ch->select("SELECT variant, uniq(visitor_id) AS visitors FROM ({$expCte}) GROUP BY variant") as $r) {
+                $visitorsByVariant[(string) $r['variant']] = (int) $r['visitors'];
             }
-
-            $curRow = $this->ch->select("
-                SELECT currency FROM conversions
-                WHERE domain_id = {$domainId} AND currency != ''
-                GROUP BY currency ORDER BY sum(value) DESC LIMIT 1
-            ");
-            $currency = $curRow[0]['currency'] ?? '';
+            foreach ($this->ch->select("
+                SELECT e.variant AS variant, uniq(e.visitor_id) AS converters
+                FROM ({$expCte}) AS e
+                INNER JOIN ({$goalCte}) AS g ON e.visitor_id = g.visitor_id
+                GROUP BY variant
+            ") as $r) {
+                $convByVariant[(string) $r['variant']] = (int) $r['converters'];
+            }
         } catch (\Throwable $e) {
-            report($e); // conversions table may not be migrated yet
+            report($e);
         }
 
-        // Build per-variant rows in the experiment's declared order (first = control).
-        $variants = $experiment->variants ?? [];
-        $control = $variants[0] ?? null;
-        $controlVisitors = $control !== null ? ($visitorsByVariant[$control] ?? 0) : 0;
-        $controlConv = $control !== null ? ($convByVariant[$control]['converters'] ?? 0) : 0;
+        // Optional revenue overlay (reuses the conversions join).
+        $revenue = [];
+        try {
+            $revenue = $this->revenueByVariant($domainId, $experiment->key);
+        } catch (\Throwable $e) {
+            report($e);
+        }
+
+        // Build per-variation rows; control is the flagged variation.
+        $control = $experiment->variations->firstWhere('is_control', true)
+            ?? $experiment->variations->first();
+        $controlKey = $control?->vkey;
+        $controlVisitors = $controlKey ? ($visitorsByVariant[$controlKey] ?? 0) : 0;
+        $controlConv = $controlKey ? ($convByVariant[$controlKey] ?? 0) : 0;
         $controlRate = $controlVisitors > 0 ? $controlConv / $controlVisitors : 0.0;
 
         $results = [];
-        foreach ($variants as $variant) {
-            $visitors = $visitorsByVariant[$variant] ?? 0;
-            $conv = $convByVariant[$variant] ?? ['converters' => 0, 'orders' => 0, 'revenue' => 0.0];
-            $rate = $visitors > 0 ? $conv['converters'] / $visitors : 0.0;
-            $isControl = $variant === $control;
-
-            $uplift = (!$isControl && $controlRate > 0) ? round(($rate - $controlRate) / $controlRate * 100, 1) : null;
-            $z = (!$isControl) ? $this->zScore($controlConv, $controlVisitors, $conv['converters'], $visitors) : null;
+        foreach ($experiment->variations as $v) {
+            $visitors = $visitorsByVariant[$v->vkey] ?? 0;
+            $converters = $convByVariant[$v->vkey] ?? 0;
+            $rate = $visitors > 0 ? $converters / $visitors : 0.0;
+            $isControl = (bool) $v->is_control;
+            $z = !$isControl ? $this->zScore($controlConv, $controlVisitors, $converters, $visitors) : null;
 
             $results[] = [
-                'variant' => $variant,
+                'key' => $v->vkey,
+                'name' => $v->name,
+                'weight' => $v->weight,
                 'is_control' => $isControl,
                 'visitors' => $visitors,
-                'converters' => $conv['converters'],
-                'orders' => $conv['orders'],
-                'revenue' => round($conv['revenue'], 2),
+                'converters' => $converters,
                 'conversion_rate' => round($rate * 100, 2),
-                'revenue_per_visitor' => $visitors > 0 ? round($conv['revenue'] / $visitors, 2) : 0.0,
-                'uplift' => $uplift,
+                'uplift' => (!$isControl && $controlRate > 0) ? round(($rate - $controlRate) / $controlRate * 100, 1) : null,
+                'revenue' => round((float) ($revenue[$v->vkey]['revenue'] ?? 0), 2),
                 'z' => $z !== null ? round($z, 2) : null,
-                'significant' => $z !== null ? abs($z) >= 1.96 : null, // 95% confidence
+                'significant' => $z !== null ? abs($z) >= 1.96 : null,
             ];
         }
 
-        return $this->success([
-            'experiment' => $experiment,
-            'currency' => $currency,
-            'results' => $results,
+        return $this->success(['experiment' => $experiment, 'results' => $results]);
+    }
+
+    // ── Builder helpers ────────────────────────────────────────────────────────
+
+    private function validateBuilder(Request $request, bool $creating): array
+    {
+        $req = $creating ? 'required' : 'sometimes';
+        return $request->validate([
+            'name' => [$req, 'string', 'max:200'],
+            'type' => [$req, 'in:ab,split_url'],
+            'target_url' => [$req, 'string', 'max:2048'],
+            'goal_type' => [$req, 'in:purchase,event,url'],
+            'goal_value' => ['nullable', 'string', 'max:255'],
+            'status' => ['sometimes', 'in:draft,running,paused'],
+            'variations' => [$req, 'array', 'min:1', 'max:10'],
+            'variations.*.name' => ['required_with:variations', 'string', 'max:120'],
+            'variations.*.weight' => ['required_with:variations', 'integer', 'min:0', 'max:100'],
+            'variations.*.js_code' => ['nullable', 'string'],
+            'variations.*.css_code' => ['nullable', 'string'],
+            'variations.*.redirect_url' => ['nullable', 'string', 'max:2048'],
         ]);
+    }
+
+    private function syncVariations(Experiment $experiment, array $variations): void
+    {
+        $experiment->variations()->delete();
+        foreach (array_values($variations) as $i => $v) {
+            $experiment->variations()->create([
+                'vkey' => $i === 0 ? 'control' : 'v' . $i,
+                'name' => $v['name'],
+                'weight' => (int) $v['weight'],
+                'is_control' => $i === 0,
+                'js_code' => $v['js_code'] ?? null,
+                'css_code' => $v['css_code'] ?? null,
+                'redirect_url' => $v['redirect_url'] ?? null,
+                'sort' => $i,
+            ]);
+        }
+    }
+
+    private function uniqueKey(int $domainId, string $name): string
+    {
+        $base = \Illuminate\Support\Str::slug($name) ?: 'exp';
+        $key = $base;
+        $i = 1;
+        while (Experiment::where('domain_id', $domainId)->where('key', $key)->exists()) {
+            $key = $base . '-' . (++$i);
+        }
+        return $key;
     }
 
     /** Two-proportion z-test between control and a variant. */
