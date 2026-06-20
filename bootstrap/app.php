@@ -24,6 +24,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'superadmin' => \App\Http\Middleware\SuperAdmin::class,
             'throttle' => \App\Http\Middleware\ThrottleRequests::class,
             'api.key' => \App\Http\Middleware\ApiKeyAuth::class,
+            'subscribed' => \App\Http\Middleware\EnsureSubscribed::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {

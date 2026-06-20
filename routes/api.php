@@ -202,7 +202,7 @@ Route::prefix('v1')->middleware('api.key')->group(function () {
     Route::middleware('auth:sanctum')->group(function () {
 
         // Cross-site portfolio (user-scoped, spans all the user's domains)
-        Route::prefix('portfolio')->name('portfolio.')->group(function () {
+        Route::prefix('portfolio')->name('portfolio.')->middleware('subscribed')->group(function () {
             Route::get('overview', [PortfolioController::class, 'overview'])->name('overview');
             Route::get('triage', [PortfolioController::class, 'triage'])->name('triage');
         });
@@ -211,7 +211,7 @@ Route::prefix('v1')->middleware('api.key')->group(function () {
         Route::post('alert-rules/apply-defaults', [AlertRuleController::class, 'applyDefaults'])->name('alert-rules.apply-defaults');
 
         // Growth — leads CRM + compliant AI outreach (user-scoped).
-        Route::prefix('leads')->name('leads.')->group(function () {
+        Route::prefix('leads')->name('leads.')->middleware('subscribed')->group(function () {
             Route::get('/', [LeadController::class, 'index'])->name('index');
             Route::post('/', [LeadController::class, 'store'])->name('store');
             Route::post('import', [LeadController::class, 'import'])->name('import');
@@ -296,7 +296,7 @@ Route::prefix('v1')->middleware('api.key')->group(function () {
         });
 
         // Exports
-        Route::prefix('exports')->name('exports.')->group(function () {
+        Route::prefix('exports')->name('exports.')->middleware('subscribed')->group(function () {
             Route::get('/', [ExportController::class, 'index'])->name('index');
             Route::post('/', [ExportController::class, 'store'])->name('store');
             Route::get('{id}', [ExportController::class, 'show'])->name('show');
@@ -321,7 +321,7 @@ Route::prefix('v1')->middleware('api.key')->group(function () {
         | Domain routes
         |--------------------------------------------------------------------------
         */
-        Route::prefix('domains')->name('domains.')->group(function () {
+        Route::prefix('domains')->name('domains.')->middleware('subscribed')->group(function () {
             Route::get('/', [DomainController::class, 'index'])->name('index');
             Route::post('/', [DomainController::class, 'store'])->name('store');
             Route::get('/{domain}', [DomainController::class, 'show'])->name('show');
@@ -400,7 +400,7 @@ Route::prefix('v1')->middleware('api.key')->group(function () {
         | Analytics (alternative domain-by-id routes)
         |--------------------------------------------------------------------------
         */
-        Route::prefix('analytics/{domainId}')->name('analytics2.')->group(function () {
+        Route::prefix('analytics/{domainId}')->name('analytics2.')->middleware('subscribed')->group(function () {
             Route::get('identities', [IdentityController::class, 'index'])->name('identities');
             Route::get('identities/{externalId}', [IdentityController::class, 'show'])->name('identities.show');
             Route::get('companies', [CompanyController::class, 'index'])->name('companies');
@@ -413,7 +413,7 @@ Route::prefix('v1')->middleware('api.key')->group(function () {
         | The {domain} param triggers implicit model binding (Domain::find($id))
         |--------------------------------------------------------------------------
         */
-        Route::prefix('analytics/{domain}')->name('analyticsById.')->group(function () {
+        Route::prefix('analytics/{domain}')->name('analyticsById.')->middleware('subscribed')->group(function () {
             Route::get('stats', StatsController::class)->name('stats');
             Route::get('devices', DevicesController::class)->name('devices');
             Route::get('referrers', ReferrersController::class)->name('referrers');
@@ -424,7 +424,7 @@ Route::prefix('v1')->middleware('api.key')->group(function () {
             Route::get('funnels/{pipeline}', PipelineController::class)->name('funnels');
         });
 
-        Route::prefix('analytics/{domainId}')->name('analyticsVisitors.')->group(function () {
+        Route::prefix('analytics/{domainId}')->name('analyticsVisitors.')->middleware('subscribed')->group(function () {
             Route::get('overview', OverviewController::class)->name('overview');
             Route::get('visitors', [VisitorController::class, 'index'])->name('visitors');
             Route::get('visitors/{visitorId}', [VisitorController::class, 'show'])->name('visitors.show');
@@ -461,7 +461,7 @@ Route::prefix('v1')->middleware('api.key')->group(function () {
         | UX Intelligence
         |--------------------------------------------------------------------------
         */
-        Route::prefix('ux/{domainId}')->name('ux.')->group(function () {
+        Route::prefix('ux/{domainId}')->name('ux.')->middleware('subscribed')->group(function () {
             Route::get('score', UxScoreController::class)->name('score');
             Route::get('issues', UxIssuesController::class)->name('issues');
             Route::get('heatmap', UxHeatmapController::class)->name('heatmap');
@@ -477,7 +477,7 @@ Route::prefix('v1')->middleware('api.key')->group(function () {
         | AI
         |--------------------------------------------------------------------------
         */
-        Route::prefix('ai/{domainId}')->name('ai.')->group(function () {
+        Route::prefix('ai/{domainId}')->name('ai.')->middleware('subscribed')->group(function () {
             Route::get('segments', [AiController::class, 'segments'])->name('segments');
             Route::get('suggestions', [AiController::class, 'suggestions'])->name('suggestions');
             Route::get('report', [AiController::class, 'report'])->name('report');
@@ -495,7 +495,7 @@ Route::prefix('v1')->middleware('api.key')->group(function () {
         | Session Replay (enabled via data-replay="true" on the tracker snippet)
         |--------------------------------------------------------------------------
         */
-        Route::prefix('replay/{domainId}')->name('replay.')->group(function () {
+        Route::prefix('replay/{domainId}')->name('replay.')->middleware('subscribed')->group(function () {
             Route::get('sessions', [ReplayController::class, 'sessions'])->name('sessions');
             Route::get('funnel-drops', [ReplayController::class, 'funnelDrops'])->name('funnel-drops');
             Route::get('sessions/{sessionId}', [ReplayController::class, 'events'])->name('events');
@@ -508,7 +508,7 @@ Route::prefix('v1')->middleware('api.key')->group(function () {
         | AI Assistant Chatbot
         |--------------------------------------------------------------------------
         */
-        Route::prefix('chatbot/{domainId}')->name('chatbot.')->group(function () {
+        Route::prefix('chatbot/{domainId}')->name('chatbot.')->middleware('subscribed')->group(function () {
             Route::get('sessions', [ChatbotController::class, 'sessions'])->name('sessions');
             Route::post('sessions', [ChatbotController::class, 'startSession'])->name('sessions.start');
             Route::get('sessions/{sessionId}', [ChatbotController::class, 'showSession'])->name('sessions.show');

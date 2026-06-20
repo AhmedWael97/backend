@@ -48,7 +48,10 @@ class RegisterController extends Controller
             'status' => 'active',
         ]);
 
-        // Attach free plan subscription
+        // Attach a 30-day free trial on the free plan. After `current_period_end`
+        // the subscription is no longer "active" (see User::activeSubscription),
+        // so the `subscribed` middleware blocks product features until the user
+        // pays. Account/billing routes stay open so they can subscribe.
         $freePlan = Plan::where('slug', 'free')->first();
         if ($freePlan) {
             Subscription::create([
@@ -56,6 +59,8 @@ class RegisterController extends Controller
                 'plan_id' => $freePlan->id,
                 'status' => 'active',
                 'current_period_start' => now(),
+                'current_period_end' => now()->addDays(30),
+                'notes' => 'Free trial (30 days)',
             ]);
         }
 
