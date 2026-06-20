@@ -54,44 +54,62 @@ class PaymobController extends Controller
         $method = PaymentMethod::where('type', 'paymob')->where('is_active', true)->first();
         $cfg = (array) ($method?->config ?? []);
 
-        $mode = in_array(($cfg['mode'] ?? null), ['test', 'production'], true) ? $cfg['mode'] : 'test';
-        $modeCfg = is_array($cfg[$mode] ?? null) ? $cfg[$mode] : [];
+        $selectedMode = in_array(($cfg['mode'] ?? null), ['test', 'production'], true) ? $cfg['mode'] : 'test';
 
-        // Per field: active-mode DB → flat/legacy DB → env. Trim whitespace so a
-        // stray space doesn't read as "configured" then fail at Paymob.
-        $pick = function (string $key, string $envKey) use ($modeCfg, $cfg) {
-            $v = $modeCfg[$key] ?? $cfg[$key] ?? config("services.paymob.{$envKey}");
-            return is_string($v) ? trim($v) : $v;
+        // Resolve a full credential set for a given mode. Per field:
+        // mode-nested DB → flat/legacy DB → env. Whitespace is trimmed so a stray
+        // space never reads as "configured" then fails at Paymob.
+        $resolveMode = function (string $mode) use ($cfg) {
+            $modeCfg = is_array($cfg[$mode] ?? null) ? $cfg[$mode] : [];
+            $pick = function (string $key) use ($modeCfg, $cfg) {
+                $v = $modeCfg[$key] ?? $cfg[$key] ?? config("services.paymob.{$key}");
+                return is_string($v) ? trim($v) : $v;
+            };
+
+            $apiKey = (string) $pick('api_key');
+            $integrationIdRaw = (string) $pick('integration_id'); // blank must NOT become 0
+            $iframeId = (string) $pick('iframe_id');
+
+            $missing = [];
+            if ($apiKey === '') {
+                $missing[] = 'api_key';
+            }
+            if ($integrationIdRaw === '') {
+                $missing[] = 'integration_id';
+            }
+            if ($iframeId === '') {
+                $missing[] = 'iframe_id';
+            }
+
+            return [
+                'mode' => $mode,
+                'base_url' => rtrim((string) ($pick('base_url') ?: self::DEFAULT_BASE_URL), '/'),
+                'api_key' => $apiKey,
+                'integration_id' => (int) $integrationIdRaw,
+                'iframe_id' => $iframeId,
+                'hmac_secret' => (string) $pick('hmac_secret'),
+                'missing' => $missing,
+            ];
         };
 
-        $baseUrl = (string) ($pick('base_url', 'base_url') ?: self::DEFAULT_BASE_URL);
-        $apiKey = (string) $pick('api_key', 'api_key');
-        $integrationIdRaw = (string) $pick('integration_id', 'integration_id'); // blank must NOT become 0
-        $iframeId = (string) $pick('iframe_id', 'iframe_id');
-        $hmacSecret = (string) $pick('hmac_secret', 'hmac_secret');
+        // Prefer the selected mode. But if it's incomplete while the OTHER mode is
+        // fully populated, use the other mode — this rescues the common mistake of
+        // entering keys under one environment toggle while saving with the other
+        // selected (which otherwise hard-fails with "not fully configured").
+        $resolved = $resolveMode($selectedMode);
+        if (!empty($resolved['missing'])) {
+            $other = $selectedMode === 'test' ? 'production' : 'test';
+            $otherResolved = $resolveMode($other);
+            if (empty($otherResolved['missing'])) {
+                Log::warning('Paymob: selected mode incomplete — falling back to the populated environment', [
+                    'selected' => $selectedMode,
+                    'used' => $other,
+                ]);
+                $resolved = $otherResolved;
+            }
+        }
 
-        // Required fields that are empty for the active mode (precise diagnosis).
-        $missing = [];
-        if ($apiKey === '') {
-            $missing[] = 'api_key';
-        }
-        if ($integrationIdRaw === '') {
-            $missing[] = 'integration_id';
-        }
-        if ($iframeId === '') {
-            $missing[] = 'iframe_id';
-        }
-
-        return [
-            'method' => $method,
-            'mode' => $mode,
-            'base_url' => rtrim($baseUrl, '/'),
-            'api_key' => $apiKey,
-            'integration_id' => (int) $integrationIdRaw,
-            'iframe_id' => $iframeId,
-            'hmac_secret' => $hmacSecret,
-            'missing' => $missing,
-        ];
+        return array_merge(['method' => $method], $resolved);
     }
 
     /**

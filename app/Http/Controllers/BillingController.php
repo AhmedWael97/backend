@@ -51,7 +51,12 @@ class BillingController extends Controller
             ->orderBy('sort_order')
             ->get();
 
-        $bankTransferMethod = $this->getOrCreateBankTransferMethod();
+        // Look up an ACTIVE bank-transfer method only — never auto-create one here.
+        // Auto-creating on read resurrected the method every time an admin disabled
+        // it (a fresh is_active=true row was spawned on the next billing-page load).
+        $bankTransferMethod = PaymentMethod::where('type', 'bank_transfer')
+            ->where('is_active', true)
+            ->first();
 
         $paymentMethods = PaymentMethod::where('is_active', true)
             ->orderByRaw("CASE WHEN type = 'bank_transfer' THEN 0 ELSE 1 END")
@@ -101,8 +106,12 @@ class BillingController extends Controller
 
         $user = $request->user();
         $plan = Plan::findOrFail($data['plan_id']);
-        $fallbackMethod = $this->getOrCreateBankTransferMethod();
-        $paymentMethodId = (int) ($data['payment_method_id'] ?? $fallbackMethod->id);
+        // Only an ACTIVE bank-transfer method is a valid fallback. If none is
+        // active and none was supplied, the lookup below returns null → 422.
+        $fallbackMethod = PaymentMethod::where('type', 'bank_transfer')
+            ->where('is_active', true)
+            ->first();
+        $paymentMethodId = (int) ($data['payment_method_id'] ?? $fallbackMethod?->id);
 
         $paymentMethod = PaymentMethod::where('id', $paymentMethodId)
             ->where('is_active', true)
@@ -168,28 +177,6 @@ class BillingController extends Controller
             'data' => [
                 'subscription' => $subscription->load('plan', 'paymentMethod'),
                 'payment' => $payment,
-            ],
-        ]);
-    }
-
-    private function getOrCreateBankTransferMethod(): PaymentMethod
-    {
-        $existing = PaymentMethod::where('type', 'bank_transfer')->where('is_active', true)->first();
-        if ($existing) {
-            return $existing;
-        }
-
-        return PaymentMethod::create([
-            'name' => 'Bank Transfer',
-            'name_ar' => 'حوالة بنكية',
-            'type' => 'bank_transfer',
-            'is_active' => true,
-            'config' => [
-                'bank_name' => env('BANK_TRANSFER_BANK_NAME', 'Your Bank Name'),
-                'account_name' => env('BANK_TRANSFER_ACCOUNT_NAME', 'EYE Analytics LLC'),
-                'account_number' => env('BANK_TRANSFER_ACCOUNT_NUMBER', '0000000000'),
-                'iban' => env('BANK_TRANSFER_IBAN', 'IBAN0000000000000000'),
-                'swift' => env('BANK_TRANSFER_SWIFT', 'SWIFT000'),
             ],
         ]);
     }
