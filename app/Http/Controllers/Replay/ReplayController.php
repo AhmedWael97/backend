@@ -41,18 +41,16 @@ class ReplayController extends Controller
         $from = $request->query('from', now()->subDays(7)->format('Y-m-d'));
         $to = $request->query('to', now()->format('Y-m-d'));
 
-        // Minimum event count for a recording to be considered viewable.
-        // A valid rrweb session needs at least one Meta (type 4) + one
-        // FullSnapshot (type 2) event plus a few IncrementalSnapshots to be
-        // worth showing. 10 is a safe lower bound observed in production.
-        $minEvents = 10;
-
-        // No "status = complete" filter — nothing in the system flips that flag
-        // today, so requiring it would hide every legitimate recording.
-        // We rely on event_count + recorded_at recency as the playability gate.
+        // Playability gate: a recording is only listed once it has a valid
+        // FullSnapshot (set at ingest). This guarantees we never surface broken/
+        // incomplete recordings, and also hides legacy snapshot-less ones
+        // (has_snapshot defaults false). The tracker only uploads sessions that
+        // qualified (a friction signal or real engagement), so every listed
+        // recording is both playable AND worth watching.
         $replays = SessionReplay::where('domain_id', $domain->id)
             ->where('status', '!=', 'pruned')
-            ->where('event_count', '>=', $minEvents)
+            ->where('has_snapshot', true)
+            ->where('event_count', '>=', 5)
             ->whereBetween('recorded_at', [
                 $from . ' 00:00:00',
                 $to . ' 23:59:59',

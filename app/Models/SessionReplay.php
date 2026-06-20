@@ -14,6 +14,9 @@ class SessionReplay extends Model
         'start_url',
         'duration_seconds',
         'event_count',
+        'has_snapshot',
+        'reason',
+        'score',
         'size_bytes',
         'status',
         'recorded_at',
@@ -21,7 +24,7 @@ class SessionReplay extends Model
 
     protected function casts(): array
     {
-        return ['recorded_at' => 'datetime'];
+        return ['recorded_at' => 'datetime', 'has_snapshot' => 'boolean'];
     }
 
     public function domain(): BelongsTo

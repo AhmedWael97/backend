@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Domain;
 use App\Models\Experiment;
 use App\Services\ClickHouseService;
+use App\Services\ConvertService;
 use App\Services\GrowthBookService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -26,7 +27,57 @@ class ExperimentController extends Controller
     public function __construct(
         private ClickHouseService $ch,
         private GrowthBookService $growthbook,
+        private ConvertService $convert,
     ) {
+    }
+
+    // ── Convert.com integration ───────────────────────────────────────────────
+    // Convert owns assignment + stats; EYE overlays revenue (matched by the
+    // experience key to our exposure events, same join as GrowthBook).
+
+    public function convertStatus(Request $request, int $domainId): JsonResponse
+    {
+        $this->authorizeDomain($request, $domainId);
+        return $this->success(['connected' => $this->convert->isConfigured()]);
+    }
+
+    public function convertList(Request $request, int $domainId): JsonResponse
+    {
+        $this->authorizeDomain($request, $domainId);
+        $experiments = $this->convert->listExperiments();
+        $out = array_map(fn($e) => [
+            'id' => (string) ($e['id'] ?? ''),
+            'name' => $e['name'] ?? ('Experience ' . ($e['id'] ?? '')),
+            'key' => $e['key'] ?? ($e['name'] ?? null),
+            'status' => $e['status'] ?? null,
+            'variations' => array_map(
+                fn($v) => $v['key'] ?? $v['name'] ?? (string) ($v['id'] ?? ''),
+                $e['variations'] ?? $e['variants'] ?? []
+            ),
+        ], $experiments);
+
+        return $this->success([
+            'connected' => $this->convert->isConfigured(),
+            'experiments' => $out,
+        ]);
+    }
+
+    public function convertResults(Request $request, int $domainId, string $id): JsonResponse
+    {
+        $domain = $this->authorizeDomain($request, $domainId);
+        $domainId = (int) $domain->id;
+
+        $experiment = $this->convert->experiment($id);
+        $results = $this->convert->results($id);
+        // Match Convert experience to our exposure events by key (or name fallback).
+        $key = (string) ($experiment['key'] ?? $experiment['name'] ?? '');
+        $revenue = $key !== '' ? $this->revenueByVariant($domainId, $key) : [];
+
+        return $this->success([
+            'experiment' => $experiment,
+            'convert_results' => $results,
+            'revenue' => $revenue,
+        ]);
     }
 
     // ── GrowthBook integration ────────────────────────────────────────────────

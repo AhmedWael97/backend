@@ -27,6 +27,10 @@ use App\Http\Controllers\Analytics\AdSpendController;
 use App\Http\Controllers\Analytics\RetentionController;
 use App\Http\Controllers\Analytics\ExperimentController;
 use App\Http\Controllers\Analytics\PortfolioController;
+use App\Http\Controllers\Analytics\LtvController;
+use App\Http\Controllers\Tools\SeoRankController;
+use App\Http\Controllers\Growth\LeadController;
+use App\Http\Controllers\Growth\OutreachController;
 use App\Http\Controllers\Analytics\EngagedVisitorsController;
 use App\Http\Controllers\Analytics\SummaryController;
 use App\Http\Controllers\BillingController;
@@ -121,6 +125,12 @@ Route::prefix('v1')->middleware('api.key')->group(function () {
         ->withoutMiddleware('api.key')
         ->middleware('throttle:60,1');
 
+    // Outreach unsubscribe (clicked from email) + Mailgun events — public.
+    Route::get('outreach/unsubscribe/{token}', [OutreachController::class, 'unsubscribe'])
+        ->name('outreach.unsubscribe')->withoutMiddleware('api.key');
+    Route::post('outreach/mailgun-webhook', [OutreachController::class, 'mailgunWebhook'])
+        ->name('outreach.mailgun')->withoutMiddleware('api.key')->middleware('throttle:120,1');
+
     /*
     |--------------------------------------------------------------------------
     | Tracker endpoints (public, no auth)
@@ -194,6 +204,18 @@ Route::prefix('v1')->middleware('api.key')->group(function () {
 
         // Bulk-apply recommended alert rules to all the user's domains.
         Route::post('alert-rules/apply-defaults', [AlertRuleController::class, 'applyDefaults'])->name('alert-rules.apply-defaults');
+
+        // Growth — leads CRM + compliant AI outreach (user-scoped).
+        Route::prefix('leads')->name('leads.')->group(function () {
+            Route::get('/', [LeadController::class, 'index'])->name('index');
+            Route::post('/', [LeadController::class, 'store'])->name('store');
+            Route::post('import', [LeadController::class, 'import'])->name('import');
+            Route::post('warm', [LeadController::class, 'warm'])->name('warm');
+            Route::put('{id}', [LeadController::class, 'update'])->name('update');
+            Route::delete('{id}', [LeadController::class, 'destroy'])->name('destroy');
+        });
+        Route::post('outreach/draft', [OutreachController::class, 'draft'])->name('outreach.draft');
+        Route::post('outreach/send', [OutreachController::class, 'send'])->name('outreach.send');
 
         // Auth session
         Route::get('auth/me', [ProfileController::class, 'show'])->name('auth.me');
@@ -403,12 +425,20 @@ Route::prefix('v1')->middleware('api.key')->group(function () {
             Route::get('visitors/{visitorId}', [VisitorController::class, 'show'])->name('visitors.show');
             Route::get('campaigns', CampaignsController::class)->name('campaigns');
             Route::get('retention', RetentionController::class)->name('retention');
+            Route::get('ltv', LtvController::class)->name('ltv');
+            Route::get('seo-rank', [SeoRankController::class, 'index'])->name('seo-rank.index');
+            Route::post('seo-rank/keywords', [SeoRankController::class, 'storeKeyword'])->name('seo-rank.keywords.store');
+            Route::post('seo-rank/import', [SeoRankController::class, 'import'])->name('seo-rank.import');
+            Route::delete('seo-rank/keywords/{id}', [SeoRankController::class, 'destroyKeyword'])->name('seo-rank.keywords.destroy');
             Route::get('experiments', [ExperimentController::class, 'index'])->name('experiments.index');
             Route::post('experiments', [ExperimentController::class, 'store'])->name('experiments.store');
             // GrowthBook-backed experiments (registered before the {id} routes).
             Route::get('experiments/growthbook/status', [ExperimentController::class, 'growthbookStatus'])->name('experiments.gb.status');
             Route::get('experiments/growthbook', [ExperimentController::class, 'growthbookList'])->name('experiments.gb.list');
             Route::get('experiments/growthbook/{id}/results', [ExperimentController::class, 'growthbookResults'])->name('experiments.gb.results');
+            Route::get('experiments/convert/status', [ExperimentController::class, 'convertStatus'])->name('experiments.convert.status');
+            Route::get('experiments/convert', [ExperimentController::class, 'convertList'])->name('experiments.convert.list');
+            Route::get('experiments/convert/{id}/results', [ExperimentController::class, 'convertResults'])->name('experiments.convert.results');
             Route::get('experiments/{id}/results', [ExperimentController::class, 'results'])->name('experiments.results');
             Route::delete('experiments/{id}', [ExperimentController::class, 'destroy'])->name('experiments.destroy');
             Route::get('ad-spend', [AdSpendController::class, 'index'])->name('ad-spend.index');
@@ -522,6 +552,7 @@ Route::prefix('v1')->middleware('api.key')->group(function () {
         Route::prefix('payment-methods')->name('payment-methods.')->group(function () {
             Route::get('/', [AdminPaymentMethodController::class, 'index'])->name('index');
             Route::post('/', [AdminPaymentMethodController::class, 'store'])->name('store');
+            Route::post('paymob/test', [PaymobController::class, 'test'])->name('paymob.test');
             Route::put('{id}', [AdminPaymentMethodController::class, 'update'])->name('update');
             Route::delete('{id}', [AdminPaymentMethodController::class, 'destroy'])->name('destroy');
         });

@@ -47,7 +47,7 @@ class PaymobController extends Controller
      * Resolution priority per field: active-mode DB config → flat/legacy DB
      * config → PAYMOB_* env. So old flat configs and env still work.
      *
-     * @return array{method: ?PaymentMethod, mode: string, base_url: string, api_key: string, integration_id: int, iframe_id: string, hmac_secret: string}
+     * @return array{method: ?PaymentMethod, mode: string, base_url: string, api_key: string, integration_id: int, iframe_id: string, hmac_secret: string, missing: array<int,string>}
      */
     private function resolvePaymobConfig(): array
     {
@@ -57,19 +57,71 @@ class PaymobController extends Controller
         $mode = in_array(($cfg['mode'] ?? null), ['test', 'production'], true) ? $cfg['mode'] : 'test';
         $modeCfg = is_array($cfg[$mode] ?? null) ? $cfg[$mode] : [];
 
-        $pick = fn(string $key, string $envKey) => $modeCfg[$key] ?? $cfg[$key] ?? config("services.paymob.{$envKey}");
+        // Per field: active-mode DB → flat/legacy DB → env. Trim whitespace so a
+        // stray space doesn't read as "configured" then fail at Paymob.
+        $pick = function (string $key, string $envKey) use ($modeCfg, $cfg) {
+            $v = $modeCfg[$key] ?? $cfg[$key] ?? config("services.paymob.{$envKey}");
+            return is_string($v) ? trim($v) : $v;
+        };
 
-        $baseUrl = (string) ($modeCfg['base_url'] ?? $cfg['base_url'] ?? config('services.paymob.base_url') ?: self::DEFAULT_BASE_URL);
+        $baseUrl = (string) ($pick('base_url', 'base_url') ?: self::DEFAULT_BASE_URL);
+        $apiKey = (string) $pick('api_key', 'api_key');
+        $integrationIdRaw = (string) $pick('integration_id', 'integration_id'); // blank must NOT become 0
+        $iframeId = (string) $pick('iframe_id', 'iframe_id');
+        $hmacSecret = (string) $pick('hmac_secret', 'hmac_secret');
+
+        // Required fields that are empty for the active mode (precise diagnosis).
+        $missing = [];
+        if ($apiKey === '') {
+            $missing[] = 'api_key';
+        }
+        if ($integrationIdRaw === '') {
+            $missing[] = 'integration_id';
+        }
+        if ($iframeId === '') {
+            $missing[] = 'iframe_id';
+        }
 
         return [
             'method' => $method,
             'mode' => $mode,
             'base_url' => rtrim($baseUrl, '/'),
-            'api_key' => (string) $pick('api_key', 'api_key'),
-            'integration_id' => (int) $pick('integration_id', 'integration_id'),
-            'iframe_id' => (string) $pick('iframe_id', 'iframe_id'),
-            'hmac_secret' => (string) $pick('hmac_secret', 'hmac_secret'),
+            'api_key' => $apiKey,
+            'integration_id' => (int) $integrationIdRaw,
+            'iframe_id' => $iframeId,
+            'hmac_secret' => $hmacSecret,
+            'missing' => $missing,
         ];
+    }
+
+    /**
+     * POST /api/v1/admin/payment-methods/paymob/test  (super-admin)
+     *
+     * Verifies the SAVED active-mode Paymob credentials by calling Paymob's auth
+     * endpoint, returning a precise diagnosis so misconfig is never silent.
+     */
+    public function test(Request $request): JsonResponse
+    {
+        $cfg = $this->resolvePaymobConfig();
+        $mode = $cfg['mode'];
+
+        if (!$cfg['method']) {
+            return $this->success(['ok' => false, 'mode' => $mode, 'message' => 'No active Paymob payment method. Save the credentials and enable Paymob first.']);
+        }
+        if (!empty($cfg['missing'])) {
+            return $this->success(['ok' => false, 'mode' => $mode, 'message' => "Missing required field(s) for {$mode} mode: " . implode(', ', $cfg['missing']) . '. (Make sure you entered them under the same environment that is active.)', 'missing' => $cfg['missing']]);
+        }
+
+        try {
+            $res = Http::timeout(15)->post($cfg['base_url'] . '/auth/tokens', ['api_key' => $cfg['api_key']]);
+            if (!$res->successful() || !$res->json('token')) {
+                return $this->success(['ok' => false, 'mode' => $mode, 'message' => "Paymob rejected the API key (HTTP {$res->status()}). Double-check the API key for {$mode} mode."]);
+            }
+            return $this->success(['ok' => true, 'mode' => $mode, 'message' => "Connection OK — Paymob accepted the {$mode} API key (integration {$cfg['integration_id']}, iframe {$cfg['iframe_id']})."]);
+        } catch (\Throwable $e) {
+            report($e);
+            return $this->success(['ok' => false, 'mode' => $mode, 'message' => 'Could not reach Paymob: ' . $e->getMessage()]);
+        }
     }
 
     // ── Step 1-3: Initiate payment ─────────────────────────────────────────
@@ -99,7 +151,8 @@ class PaymobController extends Controller
         $iframeId = $cfg['iframe_id'];
         $baseUrl = $cfg['base_url'];
 
-        if (!$apiKey || !$integrationId || !$iframeId) {
+        if (!empty($cfg['missing'])) {
+            Log::warning('Paymob not fully configured', ['mode' => $cfg['mode'], 'missing' => $cfg['missing']]);
             return $this->error('Paymob is not fully configured. Please contact support.', 503);
         }
 

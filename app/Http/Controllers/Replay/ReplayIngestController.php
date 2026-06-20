@@ -62,6 +62,9 @@ class ReplayIngestController extends Controller
 
         $rows = [];
         $startUrl = '';
+        $hasFullSnapshot = false;
+        // Why this session qualified for recording (rage_click / js_error / engaged …).
+        $reason = substr(preg_replace('/[^a-z_]/', '', strtolower((string) ($body['reason'] ?? ''))), 0, 32);
 
         $counterKey = sprintf('eye:replay:idx:%d:%s', (int) $domain->id, $sessionId);
 
@@ -71,6 +74,11 @@ class ReplayIngestController extends Controller
             }
 
             $type = (int) ($event['type'] ?? 0);
+
+            // rrweb type 2 = FullSnapshot — required for a recording to be playable.
+            if ($type === 2 && !empty($event['data']['node'])) {
+                $hasFullSnapshot = true;
+            }
 
             // rrweb timestamps are Unix milliseconds; convert to DateTime
             $timestamp = isset($event['timestamp'])
@@ -133,7 +141,15 @@ class ReplayIngestController extends Controller
             $replay->start_url = $startUrl;
         }
 
-        $replay->status = 'recording';
+        // A recording is "complete" (playable + listable) only once it has a
+        // valid FullSnapshot. Persist the qualify reason (first one wins).
+        if ($hasFullSnapshot) {
+            $replay->has_snapshot = true;
+        }
+        if ($reason && !$replay->reason) {
+            $replay->reason = $reason;
+        }
+        $replay->status = $replay->has_snapshot ? 'complete' : 'recording';
         $replay->recorded_at = now();
         $replay->save();
 

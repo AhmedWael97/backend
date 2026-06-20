@@ -78,4 +78,13 @@ return [
         'api_key' => env('GROWTHBOOK_API_KEY'),     // a GrowthBook REST API secret key
     ],
 
+    // Convert.com (Convert Experiences) — A/B testing engine. EYE pulls
+    // experiences/reports via the REST API and overlays its own revenue.
+    'convert' => [
+        'api_host' => env('CONVERT_API_HOST', 'https://api.convert.com/api/v2'),
+        'application_id' => env('CONVERT_APPLICATION_ID'), // Convert account/application id
+        'api_key' => env('CONVERT_API_KEY'),               // Convert REST API key/secret
+        'account_id' => env('CONVERT_ACCOUNT_ID'),
+    ],
+
 ];
