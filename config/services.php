@@ -71,6 +71,13 @@ return [
         'base_url' => env('PAYMOB_BASE_URL', 'https://accept.paymob.com/api'),
     ],
 
+    'currency' => [
+        // Base plan prices are stored in USD. Egyptian visitors are shown — and
+        // (via Paymob, which only accepts EGP) charged — in EGP at this rate.
+        // 1 USD = CURRENCY_EGP_RATE EGP.
+        'egp_rate' => (float) env('CURRENCY_EGP_RATE', 60),
+    ],
+
     // GrowthBook (self-hosted or cloud) — experiment engine + rigorous stats.
     // EYE pulls experiments/results via the REST API and overlays its own revenue.
     'growthbook' => [

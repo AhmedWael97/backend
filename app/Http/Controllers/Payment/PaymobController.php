@@ -193,7 +193,13 @@ class PaymobController extends Controller
         }
 
         // ── 2. Create order ────────────────────────────────────────────────
-        $amountCents = (int) round((float) ($plan->price_monthly ?? 0) * 100);
+        // Plan prices are stored in USD. Paymob only accepts EGP, so always
+        // convert at the configured rate — regardless of which currency the
+        // user was shown (non-EGP users see $, but are charged the EGP equivalent).
+        $egpRate = (float) config('services.currency.egp_rate', 60);
+        $priceUsd = (float) ($plan->price_monthly ?? 0);
+        $amountEgp = round($priceUsd * $egpRate, 2);
+        $amountCents = (int) round($amountEgp * 100);
 
         $orderRes = Http::timeout(15)->post($baseUrl . '/ecommerce/orders', [
             'auth_token' => $authToken,
@@ -262,7 +268,9 @@ class PaymobController extends Controller
             'user_id' => $user->id,
             'plan_id' => $plan->id,
             'payment_method_id' => $paymobMethod->id,
-            'amount' => $plan->price_monthly ?? 0,
+            // Store the EGP amount actually charged so the webhook's amount-cents
+            // reconciliation matches what Paymob reports.
+            'amount' => $amountEgp,
             'currency' => 'EGP',
             'status' => 'pending',
             'reference' => (string) $orderId,
@@ -271,6 +279,8 @@ class PaymobController extends Controller
                 'paymob_iframe_id' => $iframeId,
                 'paymob_mode' => $cfg['mode'],
                 'plan_id' => $plan->id,
+                'base_price_usd' => $priceUsd,
+                'egp_rate' => $egpRate,
             ],
         ]);
 

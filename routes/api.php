@@ -34,6 +34,7 @@ use App\Http\Controllers\Growth\OutreachController;
 use App\Http\Controllers\Analytics\EngagedVisitorsController;
 use App\Http\Controllers\Analytics\SummaryController;
 use App\Http\Controllers\BillingController;
+use App\Http\Controllers\GeoCurrencyController;
 use App\Http\Controllers\Domain\DomainController;
 use App\Http\Controllers\Domain\PipelineManagementController;
 use App\Http\Controllers\Domain\SnippetController;
@@ -135,6 +136,11 @@ Route::prefix('v1')->middleware('api.key')->group(function () {
         ->name('outreach.unsubscribe')->withoutMiddleware('api.key');
     Route::post('outreach/mailgun-webhook', [OutreachController::class, 'mailgunWebhook'])
         ->name('outreach.mailgun')->withoutMiddleware('api.key')->middleware('throttle:120,1');
+
+    // Display/billing currency from visitor IP (Egypt → EGP, else USD) — public,
+    // used by both the marketing pricing page and the in-app billing page.
+    Route::get('geo/currency', GeoCurrencyController::class)
+        ->name('geo.currency')->withoutMiddleware('api.key')->middleware('throttle:120,1');
 
     /*
     |--------------------------------------------------------------------------
