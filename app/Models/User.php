@@ -94,6 +94,92 @@ class User extends Authenticatable implements MustVerifyEmail
         return $this->hasMany(Subscription::class);
     }
 
+    // ── Organizations (agency/team) ─────────────────────────────────────────
+
+    /** Organizations this user owns. */
+    public function ownedOrganizations(): HasMany
+    {
+        return $this->hasMany(Organization::class, 'owner_user_id');
+    }
+
+    /** Membership rows linking this user to organizations. */
+    public function organizationMemberships(): HasMany
+    {
+        return $this->hasMany(OrganizationMember::class);
+    }
+
+    /** The single org this user belongs to (owner or member), if any. */
+    public function organization(): ?Organization
+    {
+        $membership = $this->organizationMemberships()->latest('id')->first();
+        return $membership?->organization
+            ?? $this->ownedOrganizations()->latest('id')->first();
+    }
+
+    /**
+     * The subscription that actually governs this user's access. For an org
+     * member, that's the org owner's subscription (the Agency plan). Falls back
+     * to the user's own subscription.
+     */
+    public function effectiveSubscription(): ?Subscription
+    {
+        $own = $this->activeSubscription()->with('plan')->first();
+        if ($own) {
+            return $own;
+        }
+
+        $org = $this->organization();
+        if ($org && $org->owner_user_id !== $this->id) {
+            return $org->owner?->activeSubscription()->with('plan')->first();
+        }
+
+        return null;
+    }
+
+    /**
+     * Can the user MANAGE a domain (rename, delete, rotate token)? Stricter than
+     * access: only the personal owner, the org owner/admin, or a superadmin —
+     * never a plain assigned member.
+     */
+    public function canManageDomain(Domain $domain): bool
+    {
+        if ($this->isSuperAdmin() || (int) $domain->user_id === (int) $this->id) {
+            return true;
+        }
+        if ($domain->organization_id) {
+            $member = $this->organizationMemberships()
+                ->where('organization_id', $domain->organization_id)
+                ->first();
+            return $member?->isOwnerOrAdmin() ?? false;
+        }
+        return false;
+    }
+
+    /** Centralised single-domain access check (mirrors Domain::scopeAccessibleBy). */
+    public function canAccessDomain(Domain $domain): bool
+    {
+        if ($this->isSuperAdmin() || (int) $domain->user_id === (int) $this->id) {
+            return true;
+        }
+
+        if ($domain->organization_id) {
+            $member = $this->organizationMemberships()
+                ->where('organization_id', $domain->organization_id)
+                ->first();
+            if ($member) {
+                if ($member->isOwnerOrAdmin()) {
+                    return true;
+                }
+                return \App\Models\Domain::query()
+                    ->whereKey($domain->id)
+                    ->whereIn('id', fn ($q) => $q->select('domain_id')->from('domain_access')->where('user_id', $this->id))
+                    ->exists();
+            }
+        }
+
+        return false;
+    }
+
     public function payments(): HasMany
     {
         return $this->hasMany(Payment::class);

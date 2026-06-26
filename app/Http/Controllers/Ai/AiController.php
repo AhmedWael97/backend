@@ -195,7 +195,7 @@ class AiController extends Controller
         $user = $request->user();
         $suggestion = AiSuggestion::when(
                 !$user->isSuperAdmin(),
-                fn($q) => $q->whereHas('domain', fn($d) => $d->where('user_id', $user->id))
+                fn($q) => $q->whereHas('domain', fn($d) => $d->accessibleBy($user))
             )
             ->findOrFail($id);
 
@@ -261,7 +261,7 @@ class AiController extends Controller
     {
         $user = $request->user();
         return Domain::where('id', $domainId)
-            ->when(!$user->isSuperAdmin(), fn($q) => $q->where('user_id', $user->id))
+            ->accessibleBy($user)
             ->firstOrFail();
     }
 }

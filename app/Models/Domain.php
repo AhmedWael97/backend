@@ -15,6 +15,7 @@ class Domain extends Model
 
     protected $fillable = [
         'user_id',
+        'organization_id',
         'domain',
         'script_token',
         'previous_script_token',
@@ -66,6 +67,46 @@ class Domain extends Model
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
+    }
+
+    public function organization(): BelongsTo
+    {
+        return $this->belongsTo(Organization::class);
+    }
+
+    /** Members explicitly granted access to this domain (via domain_access). */
+    public function accessMembers()
+    {
+        return $this->belongsToMany(User::class, 'domain_access');
+    }
+
+    /**
+     * Scope: domains the given user may access. Centralised so every list
+     * endpoint shares one definition of access:
+     *   - superadmin → all
+     *   - personal owner (user_id) → yes
+     *   - org owner/admin → all domains of their org(s)
+     *   - org member → only domains granted via domain_access
+     */
+    public function scopeAccessibleBy($query, User $user)
+    {
+        if ($user->isSuperAdmin()) {
+            return $query;
+        }
+
+        $adminOrgIds = $user->organizationMemberships()
+            ->whereIn('role', ['owner', 'admin'])
+            ->pluck('organization_id');
+
+        return $query->where(function ($q) use ($user, $adminOrgIds) {
+            $q->where('domains.user_id', $user->id)
+                ->orWhereIn('domains.id', function ($sub) use ($user) {
+                    $sub->select('domain_id')->from('domain_access')->where('user_id', $user->id);
+                });
+            if ($adminOrgIds->isNotEmpty()) {
+                $q->orWhereIn('domains.organization_id', $adminOrgIds);
+            }
+        });
     }
 
     public function pipelines(): HasMany

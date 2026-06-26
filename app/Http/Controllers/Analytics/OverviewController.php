@@ -22,7 +22,7 @@ class OverviewController extends BaseAnalyticsController
     {
         $user = $request->user();
         $domain = Domain::where('id', $domainId)
-            ->when(!$user->isSuperAdmin(), fn($q) => $q->where('user_id', $user->id))
+            ->accessibleBy($user)
             ->firstOrFail();
 
         ['start' => $start, 'end' => $end] = $this->parsePeriod($request->query('period', '30d'));

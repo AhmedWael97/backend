@@ -42,7 +42,7 @@ class CampaignsController extends Controller
     {
         $user = $request->user();
         $domain = Domain::where('id', $domainId)
-            ->when(!$user->isSuperAdmin(), fn($q) => $q->where('user_id', $user->id))
+            ->accessibleBy($user)
             ->firstOrFail();
 
         $start = $request->query('start', now()->subDays(30)->toDateString());

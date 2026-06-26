@@ -35,6 +35,9 @@ use App\Http\Controllers\Analytics\EngagedVisitorsController;
 use App\Http\Controllers\Analytics\SummaryController;
 use App\Http\Controllers\BillingController;
 use App\Http\Controllers\GeoCurrencyController;
+use App\Http\Controllers\OrganizationController;
+use App\Http\Controllers\UpgradeTicketController;
+use App\Http\Controllers\Admin\AdminUpgradeTicketController;
 use App\Http\Controllers\Domain\DomainController;
 use App\Http\Controllers\Domain\PipelineManagementController;
 use App\Http\Controllers\Domain\SnippetController;
@@ -282,6 +285,28 @@ Route::prefix('v1')->middleware('api.key')->group(function () {
             Route::get('/', [NotificationPreferenceController::class, 'index'])->name('index');
             Route::patch('/', [NotificationPreferenceController::class, 'update'])->name('update');
             Route::put('/', [NotificationPreferenceController::class, 'update'])->name('update.put'); // PUT alias
+        });
+
+        // Organization (agency/team) — NOT behind the `subscribed` gate: creating
+        // an org is how a user gets the Agency plan, and team management must stay
+        // reachable. Authorization is enforced per-action inside the controller.
+        Route::prefix('organization')->name('organization.')->group(function () {
+            Route::get('/', [OrganizationController::class, 'show'])->name('show');
+            Route::post('/', [OrganizationController::class, 'store'])->name('store');
+            Route::post('invitations', [OrganizationController::class, 'invite'])->name('invite');
+            Route::post('invitations/{token}/accept', [OrganizationController::class, 'acceptInvite'])->name('invite.accept');
+            Route::delete('invitations/{id}', [OrganizationController::class, 'cancelInvite'])->name('invite.cancel');
+            Route::post('members/{userId}/domains', [OrganizationController::class, 'assignDomains'])->name('members.domains');
+            Route::delete('members/{userId}', [OrganizationController::class, 'removeMember'])->name('members.remove');
+        });
+
+        // Plan-upgrade tickets (manual upgrade path) — NOT behind `subscribed`,
+        // so a trial-expired user can still request an upgrade.
+        Route::prefix('upgrade-tickets')->name('upgrade-tickets.')->group(function () {
+            Route::get('/', [UpgradeTicketController::class, 'index'])->name('index');
+            Route::post('/', [UpgradeTicketController::class, 'store'])->name('store')->middleware('throttle:20,1');
+            Route::get('{id}', [UpgradeTicketController::class, 'show'])->name('show');
+            Route::post('{id}/messages', [UpgradeTicketController::class, 'reply'])->name('reply')->middleware('throttle:60,1');
         });
 
         // Billing
@@ -567,6 +592,14 @@ Route::prefix('v1')->middleware('api.key')->group(function () {
             Route::post('paymob/test', [PaymobController::class, 'test'])->name('paymob.test');
             Route::put('{id}', [AdminPaymentMethodController::class, 'update'])->name('update');
             Route::delete('{id}', [AdminPaymentMethodController::class, 'destroy'])->name('destroy');
+        });
+
+        // Plan-upgrade tickets (admin: reply + apply plan)
+        Route::prefix('upgrade-tickets')->name('upgrade-tickets.')->group(function () {
+            Route::get('/', [AdminUpgradeTicketController::class, 'index'])->name('index');
+            Route::get('{id}', [AdminUpgradeTicketController::class, 'show'])->name('show');
+            Route::post('{id}/messages', [AdminUpgradeTicketController::class, 'reply'])->name('reply');
+            Route::post('{id}/resolve', [AdminUpgradeTicketController::class, 'resolve'])->name('resolve');
         });
 
         // Subscriptions

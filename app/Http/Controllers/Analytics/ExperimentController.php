@@ -427,7 +427,7 @@ class ExperimentController extends Controller
     {
         $user = $request->user();
         return Domain::where('id', $domainId)
-            ->when(!$user->isSuperAdmin(), fn($q) => $q->where('user_id', $user->id))
+            ->accessibleBy($user)
             ->firstOrFail();
     }
 }

@@ -358,7 +358,7 @@ PROMPT;
     private function authorizedDomain(Request $request, int $domainId): \App\Models\Domain
     {
         return Domain::where('id', $domainId)
-            ->where('user_id', $request->user()->id)
+            ->accessibleBy($request->user())
             ->firstOrFail();
     }
 

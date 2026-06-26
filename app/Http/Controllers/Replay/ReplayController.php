@@ -35,7 +35,7 @@ class ReplayController extends Controller
     {
         $user = $request->user();
         $domain = Domain::where('id', $domainId)
-            ->when(!$user->isSuperAdmin(), fn($q) => $q->where('user_id', $user->id))
+            ->accessibleBy($user)
             ->firstOrFail();
 
         $from = $request->query('from', now()->subDays(7)->format('Y-m-d'));
@@ -67,7 +67,7 @@ class ReplayController extends Controller
     {
         $user = $request->user();
         $domain = Domain::where('id', $domainId)
-            ->when(!$user->isSuperAdmin(), fn($q) => $q->where('user_id', $user->id))
+            ->accessibleBy($user)
             ->firstOrFail();
 
         // Verify the recording belongs to this domain (403 if not found).
@@ -141,7 +141,7 @@ class ReplayController extends Controller
     {
         $user = $request->user();
         $domain = Domain::where('id', $domainId)
-            ->when(!$user->isSuperAdmin(), fn($q) => $q->where('user_id', $user->id))
+            ->accessibleBy($user)
             ->firstOrFail();
 
         SessionReplay::where('domain_id', $domain->id)
@@ -182,7 +182,7 @@ class ReplayController extends Controller
     {
         $user = $request->user();
         $domain = Domain::where('id', $domainId)
-            ->when(!$user->isSuperAdmin(), fn($q) => $q->where('user_id', $user->id))
+            ->accessibleBy($user)
             ->firstOrFail();
 
         $pipelineId = (int) $request->query('pipeline_id', 0);
@@ -255,7 +255,7 @@ class ReplayController extends Controller
     {
         $user = $request->user();
         $domain = Domain::where('id', $domainId)
-            ->when(!$user->isSuperAdmin(), fn($q) => $q->where('user_id', $user->id))
+            ->accessibleBy($user)
             ->firstOrFail();
 
         $replay = SessionReplay::where('domain_id', $domain->id)

@@ -19,7 +19,7 @@ class SharedReportController extends Controller
     {
         $user = $request->user();
         $domain = Domain::where('id', $domainId)
-            ->when(!$user->isSuperAdmin(), fn($q) => $q->where('user_id', $user->id))
+            ->accessibleBy($user)
             ->firstOrFail();
 
         return $this->success(
@@ -51,7 +51,7 @@ class SharedReportController extends Controller
 
         $user = $request->user();
         Domain::where('id', $data['domain_id'])
-            ->when(!$user->isSuperAdmin(), fn($q) => $q->where('user_id', $user->id))
+            ->accessibleBy($user)
             ->firstOrFail();
 
         $report = SharedReport::create([

@@ -22,7 +22,7 @@ class CompanyController extends Controller
     {
         $user = $request->user();
         $domain = Domain::where('id', $domainId)
-            ->when(!$user->isSuperAdmin(), fn($q) => $q->where('user_id', $user->id))
+            ->accessibleBy($user)
             ->firstOrFail();
 
         // Gate behind Pro plan
@@ -87,7 +87,7 @@ class CompanyController extends Controller
     {
         $user = $request->user();
         $domain = Domain::where('id', $domainId)
-            ->when(!$user->isSuperAdmin(), fn($q) => $q->where('user_id', $user->id))
+            ->accessibleBy($user)
             ->firstOrFail();
 
         $plan = optional($request->user()->subscription?->plan);

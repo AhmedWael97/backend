@@ -19,7 +19,7 @@ class BotStatsController extends \App\Http\Controllers\Controller
     {
         $user = $request->user();
         $domain = Domain::where('id', $domainId)
-            ->when(!$user->isSuperAdmin(), fn($q) => $q->where('user_id', $user->id))
+            ->accessibleBy($user)
             ->firstOrFail();
 
         $today = (int) BotHit::where('domain_id', $domain->id)

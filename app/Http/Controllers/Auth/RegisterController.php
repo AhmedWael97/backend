@@ -64,6 +64,10 @@ class RegisterController extends Controller
             ]);
         }
 
+        // Auto-join any pending org invitations addressed to this email, so an
+        // invited agency employee just registers and lands inside the team.
+        $this->acceptPendingInvitations($user);
+
         // Only dispatch verification flow when explicitly enabled.
         // This avoids SMTP/network latency (and 504s) when verification is paused.
         if (!config('app.email_verification_enabled', false)) {
@@ -78,5 +82,35 @@ class RegisterController extends Controller
             'user' => $user->refresh()->only(['id', 'name', 'email', 'email_verified_at', 'locale', 'timezone', 'appearance', 'role', 'status']),
             'token' => $token,
         ], 201);
+    }
+
+    /** Join any pending organization invitations addressed to the user's email. */
+    private function acceptPendingInvitations(User $user): void
+    {
+        $invites = \App\Models\OrganizationInvitation::whereRaw('lower(email) = ?', [strtolower($user->email)])
+            ->whereNull('accepted_at')
+            ->get();
+
+        foreach ($invites as $invite) {
+            if ($invite->expires_at && $invite->expires_at->isPast()) {
+                continue;
+            }
+            \App\Models\OrganizationMember::firstOrCreate(
+                ['organization_id' => $invite->organization_id, 'user_id' => $user->id],
+                ['role' => $invite->role, 'status' => 'active'],
+            );
+
+            $domainIds = (array) cache()->pull("org_invite_domains:{$invite->token}", []);
+            $orgDomainIds = \App\Models\Domain::where('organization_id', $invite->organization_id)
+                ->whereIn('id', $domainIds)->pluck('id');
+            foreach ($orgDomainIds as $did) {
+                \Illuminate\Support\Facades\DB::table('domain_access')->updateOrInsert(
+                    ['domain_id' => $did, 'user_id' => $user->id],
+                    ['created_at' => now(), 'updated_at' => now()],
+                );
+            }
+
+            $invite->update(['accepted_at' => now()]);
+        }
     }
 }

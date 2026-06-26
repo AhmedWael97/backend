@@ -23,7 +23,9 @@ class DomainController extends Controller
                 ->latest()
                 ->get();
         } else {
-            $domains = $user->domains()
+            // Personal domains + org domains the user may access (owner/admin: all
+            // org domains; member: only assigned). Centralised in the scope.
+            $domains = Domain::accessibleBy($user)
                 ->with('exclusions')
                 ->latest()
                 ->get();
@@ -40,17 +42,29 @@ class DomainController extends Controller
         // status='active' AND not past period end). Falling back to the last
         // subscription regardless of state would let an expired paid plan keep
         // unlimited domains forever.
-        $activePlan = $user->activeSubscription?->plan;
+        // If the user is an org owner/admin, the domain belongs to the org and
+        // counts against the org's (Agency) plan limit. Otherwise it's personal.
+        $adminMembership = $user->organizationMemberships()->whereIn('role', ['owner', 'admin'])->first();
+        $orgId = $adminMembership?->organization_id;
+
+        $activePlan = $user->effectiveSubscription()?->plan;
         $limit = optional($activePlan)->getLimit('domains', 1);
-        if ($limit !== null && $limit !== -1 && $user->domains()->count() >= $limit) {
+        $currentCount = $orgId
+            ? Domain::where('organization_id', $orgId)->count()
+            : $user->domains()->count();
+        if ($limit !== null && $limit !== -1 && $currentCount >= $limit) {
             return $this->error("Your plan allows up to {$limit} domain(s). Please upgrade to add more.", 422);
         }
 
-        if ($user->domains()->where('domain', $request->domain)->exists()) {
+        $dupExists = $orgId
+            ? Domain::where('organization_id', $orgId)->where('domain', $request->domain)->exists()
+            : $user->domains()->where('domain', $request->domain)->exists();
+        if ($dupExists) {
             return $this->error('This domain is already registered.', 422);
         }
 
         $domain = $user->domains()->create([
+            'organization_id' => $orgId,
             'domain' => $request->domain,
             'timezone' => $request->input('timezone', 'UTC'),
             'settings' => $request->input('settings', []),
@@ -71,7 +85,7 @@ class DomainController extends Controller
     {
         $user = $request->user();
 
-        if ($domain->user_id !== $user->id && !$user->isSuperAdmin()) {
+        if (!$user->canAccessDomain($domain)) {
             return $this->error('Not found.', 404);
         }
 
@@ -82,7 +96,7 @@ class DomainController extends Controller
     {
         $user = $request->user();
 
-        if ($domain->user_id !== $user->id && !$user->isSuperAdmin()) {
+        if (!$user->canManageDomain($domain)) {
             return $this->error('Not found.', 404);
         }
 
@@ -95,7 +109,7 @@ class DomainController extends Controller
     {
         $user = $request->user();
 
-        if ($domain->user_id !== $user->id && !$user->isSuperAdmin()) {
+        if (!$user->canManageDomain($domain)) {
             return $this->error('Not found.', 404);
         }
 
@@ -113,7 +127,7 @@ class DomainController extends Controller
     {
         $user = $request->user();
 
-        if ($domain->user_id !== $user->id && !$user->isSuperAdmin()) {
+        if (!$user->canManageDomain($domain)) {
             return $this->error('Not found.', 404);
         }
 
@@ -136,7 +150,7 @@ class DomainController extends Controller
     {
         $user = $request->user();
 
-        if ($domain->user_id !== $user->id && !$user->isSuperAdmin()) {
+        if (!$user->canAccessDomain($domain)) {
             return $this->error('Not found.', 404);
         }
 
@@ -159,7 +173,7 @@ class DomainController extends Controller
     {
         $user = $request->user();
 
-        if ($domain->user_id !== $user->id && !$user->isSuperAdmin()) {
+        if (!$user->canAccessDomain($domain)) {
             return $this->error('Not found.', 404);
         }
 
@@ -170,7 +184,7 @@ class DomainController extends Controller
     {
         $user = $request->user();
 
-        if ($domain->user_id !== $user->id && !$user->isSuperAdmin()) {
+        if (!$user->canAccessDomain($domain)) {
             return $this->error('Not found.', 404);
         }
 
@@ -193,7 +207,7 @@ class DomainController extends Controller
     public function destroyExclusion(Request $request, Domain $domain, DomainExclusion $exclusion): JsonResponse
     {
         $user = $request->user();
-        $ownsDomain = $domain->user_id === $user->id || $user->isSuperAdmin();
+        $ownsDomain = $user->canAccessDomain($domain);
 
         if (!$ownsDomain || $exclusion->domain_id !== $domain->id) {
             return $this->error('Not found.', 404);

@@ -16,7 +16,7 @@ class SnippetController extends Controller
     {
         $user = $request->user();
 
-        if ($domain->user_id !== $user->id && !$user->isSuperAdmin()) {
+        if (!$user->canAccessDomain($domain)) {
             abort(404);
         }
 

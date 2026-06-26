@@ -13,7 +13,7 @@ class AlertRuleController extends Controller
     {
         $user = $request->user();
         $domain = Domain::where('id', $domainId)
-            ->when(!$user->isSuperAdmin(), fn($q) => $q->where('user_id', $user->id))
+            ->accessibleBy($user)
             ->firstOrFail();
 
         return $this->success(AlertRule::where('domain_id', $domain->id)->get());
@@ -70,7 +70,7 @@ class AlertRuleController extends Controller
     {
         $user = $request->user();
         $domain = Domain::where('id', $domainId)
-            ->when(!$user->isSuperAdmin(), fn($q) => $q->where('user_id', $user->id))
+            ->accessibleBy($user)
             ->firstOrFail();
 
         $data = $request->validate([
@@ -105,7 +105,7 @@ class AlertRuleController extends Controller
         $user = $request->user();
         $rule = AlertRule::when(
                 !$user->isSuperAdmin(),
-                fn($q) => $q->whereHas('domain', fn($d) => $d->where('user_id', $user->id))
+                fn($q) => $q->whereHas('domain', fn($d) => $d->accessibleBy($user))
             )
             ->findOrFail($id);
 
@@ -127,7 +127,7 @@ class AlertRuleController extends Controller
         $user = $request->user();
         AlertRule::when(
                 !$user->isSuperAdmin(),
-                fn($q) => $q->whereHas('domain', fn($d) => $d->where('user_id', $user->id))
+                fn($q) => $q->whereHas('domain', fn($d) => $d->accessibleBy($user))
             )
             ->findOrFail($id)
             ->delete();

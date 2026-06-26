@@ -33,7 +33,9 @@ class EnsureSubscribed
         }
 
         // Active = paid plan OR free trial still within its period.
-        if ($user->activeSubscription()->exists()) {
+        // effectiveSubscription() also resolves the org owner's plan for team
+        // members, so an agency's employees inherit the Agency subscription.
+        if ($user->effectiveSubscription()) {
             return $next($request);
         }
 

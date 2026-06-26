@@ -18,7 +18,7 @@ class CustomEventsStoreController extends Controller
     {
         $user = $request->user();
 
-        if ((int) $domain->user_id !== (int) $user->id && !$user->isSuperAdmin()) {
+        if (!$user->canAccessDomain($domain)) {
             abort(403);
         }
 

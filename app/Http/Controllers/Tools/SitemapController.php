@@ -53,7 +53,7 @@ class SitemapController extends Controller
         $domainId = null;
         if ($request->filled('domain_id')) {
             $domain = Domain::where('id', $request->input('domain_id'))
-                ->when(!$user->isSuperAdmin(), fn($q) => $q->where('user_id', $user->id))
+                ->accessibleBy($user)
                 ->first();
 
             if (!$domain) {
@@ -63,7 +63,7 @@ class SitemapController extends Controller
         } else {
             // Auto-detect: check if start URL host matches any of user's domains
             $host = strtolower(parse_url($url, PHP_URL_HOST) ?? '');
-            $matchedDomain = Domain::when(!$user->isSuperAdmin(), fn($q) => $q->where('user_id', $user->id))
+            $matchedDomain = Domain::accessibleBy($user)
                 ->where('domain', $host)
                 ->first();
             $domainId = $matchedDomain?->id;

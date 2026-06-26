@@ -105,6 +105,39 @@ class PlanSeeder extends Seeder
             ],
         ];
 
+        $plans[] = [
+            'name' => 'Agency',
+            'name_ar' => 'وكالة',
+            'slug' => 'agency',
+            'description' => 'For marketing agencies managing multiple client websites with a team.',
+            'description_ar' => 'لوكالات التسويق التي تدير مواقع عملاء متعددة مع فريق.',
+            'price_monthly' => 0, // free agency plan (per product decision)
+            'price_yearly' => 0,
+            'is_active' => true,
+            'is_public' => true,
+            'sort_order' => 4,
+            'features' => [
+                'realtime_dashboard' => true,
+                'email_reports' => true,
+                'ai_insights' => true,
+                'session_replay' => true,
+                'company_enrichment' => true,
+                'custom_pipelines' => true,
+                'api_access' => true,
+                'white_label' => true,
+                'team_accounts' => true, // multi-seat org with per-member domain access
+            ],
+            'limits' => [
+                'domains' => 5,            // up to 5 client domains
+                'events_per_day' => 200000,
+                'retention_days' => 90,
+                'team_members' => 10,      // up to 10 employee accounts (seats)
+                'webhooks' => 10,
+                'export_jobs' => 100,
+                'ai_reports_per_month' => 50,
+            ],
+        ];
+
         foreach ($plans as $plan) {
             Plan::updateOrCreate(['slug' => $plan['slug']], $plan);
         }

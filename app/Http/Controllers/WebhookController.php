@@ -16,7 +16,7 @@ class WebhookController extends Controller
     {
         $user = $request->user();
         $domain = Domain::where('id', $domainId)
-            ->when(!$user->isSuperAdmin(), fn($q) => $q->where('user_id', $user->id))
+            ->accessibleBy($user)
             ->firstOrFail();
 
         return $this->success(Webhook::where('domain_id', $domain->id)->get());
@@ -26,7 +26,7 @@ class WebhookController extends Controller
     {
         $user = $request->user();
         $domain = Domain::where('id', $domainId)
-            ->when(!$user->isSuperAdmin(), fn($q) => $q->where('user_id', $user->id))
+            ->accessibleBy($user)
             ->firstOrFail();
 
         $data = $request->validate([
@@ -53,7 +53,7 @@ class WebhookController extends Controller
         $user = $request->user();
         $webhook = Webhook::when(
                 !$user->isSuperAdmin(),
-                fn($q) => $q->whereHas('domain', fn($d) => $d->where('user_id', $user->id))
+                fn($q) => $q->whereHas('domain', fn($d) => $d->accessibleBy($user))
             )
             ->findOrFail($id);
 
@@ -75,7 +75,7 @@ class WebhookController extends Controller
         $user = $request->user();
         Webhook::when(
                 !$user->isSuperAdmin(),
-                fn($q) => $q->whereHas('domain', fn($d) => $d->where('user_id', $user->id))
+                fn($q) => $q->whereHas('domain', fn($d) => $d->accessibleBy($user))
             )
             ->findOrFail($id)
             ->delete();
@@ -91,7 +91,7 @@ class WebhookController extends Controller
         $user = $request->user();
         $webhook = Webhook::when(
                 !$user->isSuperAdmin(),
-                fn($q) => $q->whereHas('domain', fn($d) => $d->where('user_id', $user->id))
+                fn($q) => $q->whereHas('domain', fn($d) => $d->accessibleBy($user))
             )
             ->findOrFail($id);
 
@@ -111,7 +111,7 @@ class WebhookController extends Controller
         $user = $request->user();
         $webhook = Webhook::when(
                 !$user->isSuperAdmin(),
-                fn($q) => $q->whereHas('domain', fn($d) => $d->where('user_id', $user->id))
+                fn($q) => $q->whereHas('domain', fn($d) => $d->accessibleBy($user))
             )
             ->findOrFail($id);
 

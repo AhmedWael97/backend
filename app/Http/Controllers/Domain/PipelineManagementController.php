@@ -132,7 +132,7 @@ class PipelineManagementController extends Controller
     {
         $user = $request->user();
 
-        if ((int) $domain->user_id !== $user->id && !$user->isSuperAdmin()) {
+        if (!$user->canAccessDomain($domain)) {
             abort(403);
         }
     }
