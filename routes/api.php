@@ -150,17 +150,20 @@ Route::prefix('v1')->middleware('api.key')->group(function () {
     | Tracker endpoints (public, no auth)
     |--------------------------------------------------------------------------
     */
-    Route::post('track', TrackController::class)->name('track')->middleware('throttle:300,1');
+    // No Laravel throttle on ingestion: TikTok in-app browsers share IPs, so a
+    // per-IP limit (429) was dropping legitimate campaign events. Protect at the
+    // edge (nginx/Cloudflare) if abuse appears; per-token quota still applies.
+    Route::post('track', TrackController::class)->name('track');
     Route::post('track/optout', OptoutController::class)->name('track.optout');
-    Route::post('track/replay', ReplayIngestController::class)->name('track.replay')->middleware('throttle:600,1');
+    Route::post('track/replay', ReplayIngestController::class)->name('track.replay');
     // CORS preflight for all tracker sub-paths
     Route::options('track', CorsPreflightController::class);
     Route::options('track/replay', CorsPreflightController::class);
     Route::options('track/optout', CorsPreflightController::class);
     // Alias: /collect/* → same controllers (supports trackers installed with data-api ending in /collect)
-    Route::post('collect', TrackController::class)->middleware('throttle:300,1');
+    Route::post('collect', TrackController::class);
     Route::post('collect/optout', OptoutController::class);
-    Route::post('collect/replay', ReplayIngestController::class)->middleware('throttle:600,1');
+    Route::post('collect/replay', ReplayIngestController::class);
     Route::options('collect', CorsPreflightController::class);
     Route::options('collect/replay', CorsPreflightController::class);
     Route::options('collect/optout', CorsPreflightController::class);
