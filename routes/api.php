@@ -488,6 +488,7 @@ Route::prefix('v1')->middleware('api.key')->group(function () {
             Route::get('engaged-visitors', EngagedVisitorsController::class)->name('engaged-visitors');
             Route::get('summary', SummaryController::class)->name('summary');
             Route::get('bot-stats', BotStatsController::class)->name('bot-stats');
+            Route::get('usage', \App\Http\Controllers\Analytics\UsageController::class)->name('usage');
         });
 
         /*

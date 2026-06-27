@@ -99,28 +99,18 @@ class TrackController extends Controller
             return response('', 200, $corsHeaders);
         }
 
-        // --- Daily quota check ---
+        // --- Daily event counter (soft metric only) ---
         //
-        // The quota is enforced atomically by INCR-ing by the batch size BEFORE
-        // dispatching jobs and then checking if the resulting counter exceeds
-        // the plan limit. INCR is atomic in Redis so concurrent requests cannot
-        // race past the gate. The previous "GET then INCR" pattern allowed each
-        // batched request (≤ 50 events) to cost only +1, effectively letting
-        // a plan with a 10 000-events/day limit ingest 500 000 events/day.
+        // Tracking ingestion NEVER rejects. A dropped beacon is lost analytics,
+        // and a 429 makes the browser retry — amplifying load and still losing
+        // the event. We keep a per-day counter purely for dashboards/billing
+        // visibility, then ALWAYS queue the events for processing (Horizon).
+        // Enforce plan limits via billing/overage or edge rate-limiting if ever
+        // needed — not by 429-ing the tracker. (Previously returned 429 over
+        // `max_events_per_day_per_domain`, which froze analytics during campaigns.)
         $quotaKey = "quota:{$domain->script_token}:events:" . now()->format('Y-m-d');
-        $sub = $domain->user?->activeSubscription?->plan ?? $domain->user?->subscription?->plan;
-        $dailyLimit = optional($sub)->getLimit('max_events_per_day_per_domain', 10000);
-
-        $batchSize = max(1, count($events));
-        $newCount = (int) Redis::incrby($quotaKey, $batchSize);
+        Redis::incrby($quotaKey, max(1, count($events)));
         Redis::expire($quotaKey, 90000); // 25h to cover timezone drift
-
-        if ($dailyLimit !== -1 && $newCount > $dailyLimit) {
-            // Over quota — roll the increment back so we don't permanently
-            // penalize the domain for the events we just rejected.
-            Redis::decrby($quotaKey, $batchSize);
-            return response('', 429, $corsHeaders + ['Retry-After' => '3600']);
-        }
 
         // Mark script as verified (first hit)
         if (!$domain->isScriptVerified()) {

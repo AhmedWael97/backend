@@ -109,6 +109,12 @@ class ClickHouseService
                 'query' => [
                     'database' => $this->db,
                     'query' => "INSERT INTO {$table} FORMAT JSONEachRow",
+                    // Async inserts: ClickHouse buffers rows server-side and flushes
+                    // them in large batches instead of creating one part per insert.
+                    // This is what lets high-frequency tracking ingestion scale without
+                    // a merge/part storm (the cause of the OOM under campaign load).
+                    'async_insert' => 1,
+                    'wait_for_async_insert' => 0,
                 ],
                 'body' => $body,
                 'http_errors' => true,

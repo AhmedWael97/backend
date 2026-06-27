@@ -34,6 +34,7 @@ class PlanSeeder extends Seeder
                 'limits' => [
                     'domains' => 1,
                     'events_per_day' => 10000,
+                    'events_per_month' => 10000,
                     'retention_days' => 30,
                     'team_members' => 1,
                     'webhooks' => 0,
@@ -65,6 +66,7 @@ class PlanSeeder extends Seeder
                 'limits' => [
                     'domains' => 5,
                     'events_per_day' => 100000,
+                    'events_per_month' => 100000,
                     'retention_days' => 90,
                     'team_members' => 5,
                     'webhooks' => 5,
@@ -96,6 +98,7 @@ class PlanSeeder extends Seeder
                 'limits' => [
                     'domains' => -1, // unlimited
                     'events_per_day' => 1000000,
+                    'events_per_month' => -1,
                     'retention_days' => 365,
                     'team_members' => -1,
                     'webhooks' => -1,
@@ -130,6 +133,7 @@ class PlanSeeder extends Seeder
             'limits' => [
                 'domains' => 5,            // up to 5 client domains
                 'events_per_day' => 200000,
+                'events_per_month' => 200000,
                 'retention_days' => 90,
                 'team_members' => 10,      // up to 10 employee accounts (seats)
                 'webhooks' => 10,
