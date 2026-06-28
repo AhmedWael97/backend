@@ -29,10 +29,11 @@ class UsageController extends BaseAnalyticsController
         $owner = $domain->user;
         $plan = $owner?->effectiveSubscription()?->plan ?? $owner?->activeSubscription?->plan;
         $limit = (int) (optional($plan)->getLimit('events_per_month', 10000) ?? 10000);
-        // Super admins bypass plan caps entirely (consistent with the rest of the app);
-        // and any plan with events_per_month = -1 (e.g. Business) is unlimited.
-        $isAdminOwner = (bool) ($owner?->isSuperAdmin());
-        $unlimited = $isAdminOwner || $limit === -1;
+        // Super admins bypass plan caps entirely (consistent with the rest of the app) —
+        // whether they're the data owner OR just the one viewing. Any plan with
+        // events_per_month = -1 (e.g. Business) is also unlimited.
+        $isAdmin = (bool) ($user?->isSuperAdmin() || $owner?->isSuperAdmin());
+        $unlimited = $isAdmin || $limit === -1;
 
         $start = now()->startOfMonth()->format('Y-m-d H:i:s');
         $rows = $this->clickhouse->select(
@@ -47,7 +48,7 @@ class UsageController extends BaseAnalyticsController
             'unlimited' => $unlimited,
             'capped' => $capped,
             'overage' => $capped ? max(0, $tracked - $limit) : 0,
-            'plan' => $isAdminOwner ? 'Business' : ($plan?->name ?? 'Free'),
+            'plan' => $isAdmin ? 'Business' : ($plan?->name ?? 'Free'),
         ]);
     }
 }
