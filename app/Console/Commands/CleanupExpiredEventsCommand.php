@@ -17,8 +17,17 @@ class CleanupExpiredEventsCommand extends Command
             ->where('active', true)
             ->chunk(100, function ($domains) use ($clickhouse) {
                 foreach ($domains as $domain) {
-                    $days = $domain->user?->subscription?->plan?->getLimit('data_retention_days', 30) ?? 30;
+                    $plan = $domain->user?->subscription?->plan;
                     $id = $domain->id;
+
+                    // Unlimited retention (-1 on either key) => never delete (e.g. Business plan).
+                    $configured = $plan?->getLimit('retention_days', $plan?->getLimit('data_retention_days'));
+                    if ($configured !== null && (int) $configured < 0) {
+                        $this->line("Skipped domain #{$id} (unlimited retention)");
+                        continue;
+                    }
+
+                    $days = (int) ($plan?->getLimit('data_retention_days', 30) ?? 30);
 
                     foreach (['events', 'sessions', 'ux_events', 'pipeline_events', 'custom_events'] as $table) {
                         try {

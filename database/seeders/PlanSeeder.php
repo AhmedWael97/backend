@@ -96,10 +96,11 @@ class PlanSeeder extends Seeder
                     'white_label' => true,
                 ],
                 'limits' => [
-                    'domains' => -1, // unlimited
-                    'events_per_day' => 1000000,
+                    // Business is fully unlimited — every limit is -1 (no cap).
+                    'domains' => -1,
+                    'events_per_day' => -1,
                     'events_per_month' => -1,
-                    'retention_days' => 365,
+                    'retention_days' => -1,
                     'team_members' => -1,
                     'webhooks' => -1,
                     'export_jobs' => -1,
