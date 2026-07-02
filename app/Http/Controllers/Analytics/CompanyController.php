@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Analytics;
 
 use App\Http\Controllers\Controller;
+use App\Models\CompanyEnrichment;
 use App\Models\Domain;
 use App\Services\ClickHouseService;
 use Illuminate\Http\JsonResponse;
@@ -34,44 +35,71 @@ class CompanyController extends Controller
         $limit = 50;
         $offset = ($page - 1) * $limit;
 
-        $params = [];
-        $industryFilter = '';
-        if ($industry) {
-            $industryFilter = "AND industry = :industry";
-            $params['industry'] = $industry;
-        }
-
+        // Aggregate visiting companies from ClickHouse `sessions` (company_name is
+        // backfilled by EnrichCompanyJob). The enrichment detail (domain, industry,
+        // headcount) lives in the PostgreSQL company_enrichments table, so we join
+        // it in PHP below — ClickHouse cannot query the Postgres table.
         $rows = $this->clickhouse->select("
             SELECT
                 company_name,
-                any(company_domain) AS company_domain,
-                any(industry)       AS industry,
-                any(employee_range) AS employee_range,
-                uniq(visitor_id)    AS visitors,
-                count()             AS sessions,
-                max(started_at)     AS last_seen
+                any(country)              AS country,
+                uniq(visitor_id)          AS visitors,
+                count()                   AS sessions,
+                toString(max(started_at)) AS last_seen
             FROM sessions
-            INNER JOIN (
-                SELECT ip_hash, company_domain, industry, employee_range
-                FROM company_enrichments
-            ) AS ce ON sessions.ip_hash = ce.ip_hash
             WHERE domain_id = {$domain->id}
               AND started_at >= '{$from} 00:00:00'
               AND started_at <= '{$to} 23:59:59'
+              AND company_name IS NOT NULL
               AND company_name != ''
-              {$industryFilter}
             GROUP BY company_name
             ORDER BY sessions DESC
-            LIMIT {$limit} OFFSET {$offset}
-        ", $params);
+            LIMIT 500
+        ");
+
+        $names = array_values(array_filter(array_map(
+            fn ($r) => (string) ($r['company_name'] ?? ''),
+            $rows
+        )));
+
+        $meta = collect();
+        if (!empty($names)) {
+            $meta = CompanyEnrichment::whereIn('company_name', $names)
+                ->get(['company_name', 'company_domain', 'industry', 'employee_range'])
+                ->keyBy('company_name');
+        }
+
+        $data = [];
+        foreach ($rows as $r) {
+            $name = (string) ($r['company_name'] ?? '');
+            $m = $meta[$name] ?? null;
+            $ind = $m->industry ?? '';
+            if ($industry && $ind !== $industry) {
+                continue;
+            }
+            $data[] = [
+                'id' => $name,
+                'name' => $name,
+                'company_domain' => $m->company_domain ?? '',
+                'industry' => $ind,
+                'country' => $r['country'] ?? '',
+                'employee_range' => $m->employee_range ?? '',
+                'visits' => (int) ($r['sessions'] ?? 0),
+                'visitors' => (int) ($r['visitors'] ?? 0),
+                'last_visit' => $r['last_seen'] ?? null,
+            ];
+        }
+
+        $paged = array_slice($data, $offset, $limit);
 
         return response()->json([
             'statusCode' => 200,
             'statusText' => 'success',
-            'data' => $rows,
+            'data' => $paged,
             'meta' => [
                 'per_page' => $limit,
                 'current_page' => $page,
+                'total' => count($data),
             ],
         ]);
     }
@@ -86,28 +114,27 @@ class CompanyController extends Controller
             ->accessibleBy($user)
             ->firstOrFail();
 
-        // Company enrichment is available to everyone (no plan gate).
+        // Resolve the company name from its domain (PostgreSQL), then pull that
+        // company's sessions from ClickHouse (company_enrichments is not in CH).
+        $companyName = CompanyEnrichment::where('company_domain', $companyDomain)
+            ->value('company_name');
+        if (!$companyName) {
+            return $this->success([]);
+        }
 
+        $safeName = str_replace("'", '', $companyName);
         $rows = $this->clickhouse->select("
             SELECT
                 visitor_id,
                 session_id,
-                entry_url,
-                duration_seconds,
-                page_count,
                 country,
-                device,
-                started_at
+                toString(started_at) AS started_at
             FROM sessions
             WHERE domain_id = {$domain->id}
-              AND company_name = (
-                  SELECT company_name FROM company_enrichments
-                  WHERE company_domain = :company_domain
-                  LIMIT 1
-              )
+              AND company_name = '{$safeName}'
             ORDER BY started_at DESC
             LIMIT 200
-        ", ['company_domain' => $companyDomain]);
+        ");
 
         return $this->success($rows);
     }
