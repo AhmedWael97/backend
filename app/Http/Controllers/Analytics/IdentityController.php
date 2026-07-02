@@ -132,10 +132,111 @@ class IdentityController extends Controller
             ->accessibleBy($user)
             ->firstOrFail();
 
-        $identity = VisitorIdentity::where('domain_id', $domain->id)
+        $records = VisitorIdentity::where('domain_id', $domain->id)
             ->where('external_id', $externalId)
-            ->firstOrFail();
+            ->get();
+        if ($records->isEmpty()) {
+            abort(404);
+        }
 
-        return $this->success($identity);
+        $vids = $records->pluck('visitor_id')->filter()->unique()->values()->all();
+        $latestTraits = (array) optional($records->sortByDesc('updated_at')->first())->traits;
+
+        $sessions = [];
+        $totalPageviews = 0;
+        $totalTime = 0;
+
+        if (!empty($vids)) {
+            $inList = implode(',', array_map(
+                fn ($v) => "'" . str_replace("'", '', (string) $v) . "'",
+                $vids
+            ));
+
+            // Every page this person viewed (last 90 days), ordered within each session.
+            $pages = $this->clickhouse->select(
+                'SELECT session_id, url, title, toString(ts) AS ts, referrer, '
+                . 'device_type AS device, browser, country '
+                . 'FROM events '
+                . "WHERE domain_id = {$domain->id} AND visitor_id IN ({$inList}) "
+                . "AND type = 'pageview' AND ts > now() - INTERVAL 90 DAY "
+                . 'ORDER BY session_id, ts LIMIT 3000'
+            );
+
+            // Time-on-page (max heartbeat duration per page) to fill the last page of
+            // each session, where there's no following pageview to diff against.
+            $tops = $this->clickhouse->select(
+                'SELECT session_id, url, max(duration) AS secs '
+                . 'FROM events '
+                . "WHERE domain_id = {$domain->id} AND visitor_id IN ({$inList}) "
+                . "AND type = 'time_on_page' AND ts > now() - INTERVAL 90 DAY "
+                . 'GROUP BY session_id, url'
+            );
+            $dwellMap = [];
+            foreach ($tops as $t) {
+                $dwellMap[$t['session_id'] . '|' . $t['url']] = (int) ($t['secs'] ?? 0);
+            }
+
+            $bySession = [];
+            foreach ($pages as $p) {
+                $bySession[$p['session_id']][] = $p;
+            }
+
+            foreach ($bySession as $sid => $ps) {
+                $pageList = [];
+                $sessDur = 0;
+                $count = count($ps);
+                foreach ($ps as $i => $p) {
+                    if ($i + 1 < $count) {
+                        $dwell = strtotime($ps[$i + 1]['ts']) - strtotime($p['ts']);
+                    } else {
+                        $dwell = $dwellMap[$sid . '|' . $p['url']] ?? null;
+                    }
+                    $dwell = ($dwell !== null && $dwell >= 0 && $dwell < 3600) ? $dwell : null;
+                    if ($dwell !== null) {
+                        $sessDur += $dwell;
+                    }
+                    $pageList[] = [
+                        'url' => $p['url'],
+                        'title' => $p['title'] ?: null,
+                        'ts' => $p['ts'],
+                        'dwell_seconds' => $dwell,
+                    ];
+                }
+                $first = $ps[0];
+                $sessions[] = [
+                    'session_id' => $sid,
+                    'started_at' => $first['ts'],
+                    'referrer' => $first['referrer'] ?: null,
+                    'device' => $first['device'] ?: null,
+                    'browser' => $first['browser'] ?: null,
+                    'country' => $first['country'] ?: null,
+                    'pageviews' => $count,
+                    'duration_seconds' => $sessDur,
+                    'pages' => $pageList,
+                ];
+                $totalPageviews += $count;
+                $totalTime += $sessDur;
+            }
+
+            usort($sessions, fn ($a, $b) => strcmp($b['started_at'], $a['started_at']));
+            $sessions = array_slice($sessions, 0, 50);
+        }
+
+        return $this->success([
+            'identity' => [
+                'external_id' => $externalId,
+                'name' => $latestTraits['name'] ?? null,
+                'email' => $latestTraits['email'] ?? $externalId,
+                'traits' => $latestTraits,
+                'devices' => $records->pluck('visitor_id')->unique()->count(),
+                'first_identified_at' => optional($records->min('first_identified_at')),
+            ],
+            'stats' => [
+                'sessions' => count($sessions),
+                'pageviews' => $totalPageviews,
+                'total_time_seconds' => $totalTime,
+            ],
+            'sessions' => $sessions,
+        ]);
     }
 }
