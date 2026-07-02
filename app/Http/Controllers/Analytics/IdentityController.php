@@ -154,7 +154,7 @@ class IdentityController extends Controller
 
             // Every page this person viewed (last 90 days), ordered within each session.
             $pages = $this->clickhouse->select(
-                'SELECT session_id, url, title, toString(ts) AS ts, referrer, '
+                'SELECT session_id, url, title, ts, referrer, '
                 . 'device_type AS device, browser, country '
                 . 'FROM events '
                 . "WHERE domain_id = {$domain->id} AND visitor_id IN ({$inList}) "
