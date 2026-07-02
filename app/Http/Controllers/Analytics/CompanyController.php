@@ -25,11 +25,7 @@ class CompanyController extends Controller
             ->accessibleBy($user)
             ->firstOrFail();
 
-        // Gate behind Pro plan
-        $plan = optional($request->user()->subscription?->plan);
-        if (!$plan->getLimit('b2b_intelligence', false)) {
-            return $this->error('Company enrichment is a Pro plan feature. Please upgrade.', 403, ['upgrade' => true]);
-        }
+        // Company enrichment is available to everyone (no plan gate).
 
         $from = $request->query('from', now()->subDays(30)->format('Y-m-d'));
         $to = $request->query('to', now()->format('Y-m-d'));
@@ -90,10 +86,7 @@ class CompanyController extends Controller
             ->accessibleBy($user)
             ->firstOrFail();
 
-        $plan = optional($request->user()->subscription?->plan);
-        if (!$plan->getLimit('b2b_intelligence', false)) {
-            return $this->error('Upgrade to Pro.', 403, ['upgrade' => true]);
-        }
+        // Company enrichment is available to everyone (no plan gate).
 
         $rows = $this->clickhouse->select("
             SELECT
