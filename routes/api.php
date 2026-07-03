@@ -213,6 +213,10 @@ Route::prefix('v1')->middleware('api.key')->group(function () {
     */
     Route::middleware('auth:sanctum')->group(function () {
 
+        // Experience feedback (asked once, post-signup)
+        Route::get('feedback/status', [\App\Http\Controllers\FeedbackController::class, 'status'])->name('feedback.status');
+        Route::post('feedback', [\App\Http\Controllers\FeedbackController::class, 'store'])->name('feedback.store');
+
         // Cross-site portfolio (user-scoped, spans all the user's domains)
         Route::prefix('portfolio')->name('portfolio.')->middleware('subscribed')->group(function () {
             Route::get('overview', [PortfolioController::class, 'overview'])->name('overview');
@@ -561,6 +565,9 @@ Route::prefix('v1')->middleware('api.key')->group(function () {
     Route::middleware(['auth:sanctum', 'superadmin'])->prefix('admin')->name('admin.')->group(function () {
 
         Route::get('stats', AdminStatsController::class)->name('stats');
+
+        // Experience feedback results
+        Route::get('feedback', [\App\Http\Controllers\Admin\AdminFeedbackController::class, 'index'])->name('feedback');
 
         // Users
         Route::prefix('users')->name('users.')->group(function () {
