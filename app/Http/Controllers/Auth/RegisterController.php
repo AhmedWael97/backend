@@ -37,7 +37,9 @@ class RegisterController extends Controller
     public function __invoke(RegisterRequest $request): JsonResponse
     {
         $user = User::create([
-            'name' => $request->name,
+            // Name is optional at signup (email-first). Fall back to the email's
+            // local-part so the dashboard/greeting still has something to show.
+            'name' => $request->name ?: ucfirst(explode('@', (string) $request->email)[0]),
             'email' => $request->email,
             'password' => $request->password, // hashed via cast
             'api_key' => Str::random(64),
