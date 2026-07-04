@@ -149,6 +149,12 @@ Route::prefix('v1')->middleware('api.key')->group(function () {
     Route::get('plans', [\App\Http\Controllers\PublicPlanController::class, 'index'])
         ->name('plans.public')->withoutMiddleware('api.key')->middleware('throttle:120,1');
 
+    // Public blog (published posts) for the marketing site.
+    Route::get('blog', [\App\Http\Controllers\PublicBlogController::class, 'index'])
+        ->name('blog.index')->withoutMiddleware('api.key')->middleware('throttle:120,1');
+    Route::get('blog/{slug}', [\App\Http\Controllers\PublicBlogController::class, 'show'])
+        ->name('blog.show')->withoutMiddleware('api.key')->middleware('throttle:120,1');
+
     /*
     |--------------------------------------------------------------------------
     | Tracker endpoints (public, no auth)
@@ -573,6 +579,15 @@ Route::prefix('v1')->middleware('api.key')->group(function () {
 
         // Experience feedback results
         Route::get('feedback', [\App\Http\Controllers\Admin\AdminFeedbackController::class, 'index'])->name('feedback');
+
+        // Blog CMS
+        Route::prefix('blog')->name('blog.')->group(function () {
+            Route::get('/', [\App\Http\Controllers\Admin\AdminBlogController::class, 'index'])->name('index');
+            Route::post('/', [\App\Http\Controllers\Admin\AdminBlogController::class, 'store'])->name('store');
+            Route::get('{id}', [\App\Http\Controllers\Admin\AdminBlogController::class, 'show'])->name('show');
+            Route::post('{id}', [\App\Http\Controllers\Admin\AdminBlogController::class, 'update'])->name('update');
+            Route::delete('{id}', [\App\Http\Controllers\Admin\AdminBlogController::class, 'destroy'])->name('destroy');
+        });
 
         // Users
         Route::prefix('users')->name('users.')->group(function () {
