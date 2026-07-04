@@ -145,6 +145,10 @@ Route::prefix('v1')->middleware('api.key')->group(function () {
     Route::get('geo/currency', GeoCurrencyController::class)
         ->name('geo.currency')->withoutMiddleware('api.key')->middleware('throttle:120,1');
 
+    // Public plans for the marketing pricing page (only is_public plans).
+    Route::get('plans', [\App\Http\Controllers\PublicPlanController::class, 'index'])
+        ->name('plans.public')->withoutMiddleware('api.key')->middleware('throttle:120,1');
+
     /*
     |--------------------------------------------------------------------------
     | Tracker endpoints (public, no auth)
