@@ -225,6 +225,7 @@ class TrackController extends Controller
             'rage_click',
             'dead_click',
             'form_abandon',
+            'form_field',
             'broken_link',
             'scroll_depth',
             'time_on_page',

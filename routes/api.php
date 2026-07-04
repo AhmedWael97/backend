@@ -469,6 +469,7 @@ Route::prefix('v1')->middleware('api.key')->group(function () {
         Route::prefix('analytics/{domainId}')->name('analyticsVisitors.')->middleware('subscribed')->group(function () {
             Route::get('overview', OverviewController::class)->name('overview');
             Route::get('compare', \App\Http\Controllers\Analytics\CompareController::class)->name('compare');
+            Route::get('forms', \App\Http\Controllers\Analytics\FormsController::class)->name('forms');
             Route::get('visitors', [VisitorController::class, 'index'])->name('visitors');
             Route::get('visitors/{visitorId}', [VisitorController::class, 'show'])->name('visitors.show');
             Route::get('campaigns', CampaignsController::class)->name('campaigns');
