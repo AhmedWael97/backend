@@ -476,6 +476,7 @@ Route::prefix('v1')->middleware('api.key')->group(function () {
             Route::get('overview', OverviewController::class)->name('overview');
             Route::get('compare', \App\Http\Controllers\Analytics\CompareController::class)->name('compare');
             Route::get('forms', \App\Http\Controllers\Analytics\FormsController::class)->name('forms');
+            Route::post('forms/analyze', [\App\Http\Controllers\Analytics\FormsController::class, 'analyze'])->name('forms.analyze');
             Route::get('visitors', [VisitorController::class, 'index'])->name('visitors');
             Route::get('visitors/{visitorId}', [VisitorController::class, 'show'])->name('visitors.show');
             Route::get('campaigns', CampaignsController::class)->name('campaigns');

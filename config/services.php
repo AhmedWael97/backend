@@ -62,6 +62,11 @@ return [
         'token' => env('IPINFO_TOKEN'),
     ],
 
+    'gemini' => [
+        'key' => env('GEMINI_API_KEY'),
+        'model' => env('GEMINI_MODEL', 'gemini-2.0-flash'),
+    ],
+
     'paymob' => [
         'api_key' => env('PAYMOB_API_KEY'),
         'integration_id' => env('PAYMOB_INTEGRATION_ID'),
