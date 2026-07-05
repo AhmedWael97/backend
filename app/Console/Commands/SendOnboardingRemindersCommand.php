@@ -2,6 +2,9 @@
 
 namespace App\Console\Commands;
 
+use App\Http\Controllers\EmailController;
+use App\Mail\BrandedEmail;
+use App\Models\EmailSuppression;
 use App\Models\User;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Mail;
@@ -29,21 +32,30 @@ class SendOnboardingRemindersCommand extends Command
             ->whereBetween('created_at', [now()->subHours(72), now()->subHours(2)])
             ->whereDoesntHave('domains')
             ->whereDoesntHave('organizationMemberships')
+            ->whereNotIn('email', EmailSuppression::pluck('email'))
             ->limit(200)
             ->get();
 
         $sent = 0;
         foreach ($users as $user) {
             $link = "{$appUrl}/en/settings/domains?welcome=1";
+            $name = $user->name ?: 'there';
             try {
-                Mail::raw(
-                    "Hi {$user->name},\n\n"
-                    . "You're one step away from seeing who visits your website.\n\n"
-                    . "Add your site and paste the tracking snippet (about 2 minutes) — then EYE starts "
-                    . "showing you visitors, heatmaps, session replays and AI insights:\n{$link}\n\n"
-                    . "Stuck? Just reply to this email and we'll help you set it up.\n\n— The EYE team",
-                    fn ($m) => $m->to($user->email)->subject("You're one step away on EYE 👀")
-                );
+                Mail::to($user->email)->queue(new BrandedEmail(
+                    "You're one step away on EYE 👀",
+                    [
+                        'preheader' => 'Add your website (2 minutes) to start seeing your visitors.',
+                        'heading' => "Hi {$name}, you're one step away",
+                        'lines' => [
+                            "You created an EYE account but haven't connected a website yet — so there's no data flowing in.",
+                            "Adding your site takes about <strong>2 minutes</strong>: paste one line of code (we have guides for WordPress, Shopify, and plain HTML) and EYE starts showing your visitors, heatmaps, session replays, and AI insights.",
+                        ],
+                        'ctaText' => 'Add my website',
+                        'ctaUrl' => $link,
+                        'replyNote' => "Ran into a snag, or the setup wasn't clear? <strong>Just reply to this email</strong> — we read every message and will help you get set up.",
+                        'unsubUrl' => EmailController::unsubscribeUrl($user->email),
+                    ]
+                ));
                 $sent++;
             } catch (\Throwable $e) {
                 report($e);

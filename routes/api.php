@@ -137,6 +137,10 @@ Route::prefix('v1')->middleware('api.key')->group(function () {
     // Outreach unsubscribe (clicked from email) + Mailgun events — public.
     Route::get('outreach/unsubscribe/{token}', [OutreachController::class, 'unsubscribe'])
         ->name('outreach.unsubscribe')->withoutMiddleware('api.key');
+
+    // Generic email unsubscribe (signed URL) — onboarding/check-up/campaigns.
+    Route::get('email/unsubscribe', [\App\Http\Controllers\EmailController::class, 'unsubscribe'])
+        ->name('email.unsubscribe')->withoutMiddleware('api.key');
     Route::post('outreach/mailgun-webhook', [OutreachController::class, 'mailgunWebhook'])
         ->name('outreach.mailgun')->withoutMiddleware('api.key')->middleware('throttle:120,1');
 
@@ -580,6 +584,10 @@ Route::prefix('v1')->middleware('api.key')->group(function () {
 
         // Experience feedback results
         Route::get('feedback', [\App\Http\Controllers\Admin\AdminFeedbackController::class, 'index'])->name('feedback');
+
+        // Email campaigns (broadcast to a user segment)
+        Route::get('email/audiences', [\App\Http\Controllers\Admin\AdminEmailController::class, 'audiences'])->name('email.audiences');
+        Route::post('email/send', [\App\Http\Controllers\Admin\AdminEmailController::class, 'send'])->name('email.send');
 
         // Blog CMS
         Route::prefix('blog')->name('blog.')->group(function () {

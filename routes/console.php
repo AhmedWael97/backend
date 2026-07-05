@@ -22,3 +22,5 @@ Schedule::command('eye:process-deletions')->everyFifteenMinutes();
 Schedule::command('eye:weekly-digest')->weeklyOn(1, '08:00'); // Monday 08:00 UTC
 Schedule::command('subscriptions:expire')->dailyAt('00:05');
 Schedule::command('eye:send-onboarding-reminders')->hourly();
+// Check-up: domain added but zero events (snippet likely missing). Once/user, off-peak.
+Schedule::command('eye:send-domain-checkup')->dailyAt('10:00');
