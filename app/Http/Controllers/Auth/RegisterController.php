@@ -75,7 +75,13 @@ class RegisterController extends Controller
         if (!config('app.email_verification_enabled', false)) {
             $user->markEmailAsVerified();
         } else {
-            event(new Registered($user));
+            // Never let a mail transport failure fail the signup itself — the user
+            // is already created; verification is best-effort (resend available).
+            try {
+                event(new Registered($user));
+            } catch (\Throwable $e) {
+                report($e);
+            }
         }
 
         $token = $user->createToken('api')->plainTextToken;
