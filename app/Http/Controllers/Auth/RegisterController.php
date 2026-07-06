@@ -75,13 +75,9 @@ class RegisterController extends Controller
         if (!config('app.email_verification_enabled', false)) {
             $user->markEmailAsVerified();
         } else {
-            // Never let a mail transport failure fail the signup itself — the user
-            // is already created; verification is best-effort (resend available).
-            try {
-                event(new Registered($user));
-            } catch (\Throwable $e) {
-                report($e);
-            }
+            // Send the "account created — activate it" email as a QUEUED job, out of
+            // the request cycle. Signup can never fail on a mail transport error.
+            \App\Jobs\SendVerificationEmail::dispatch($user->id);
         }
 
         $token = $user->createToken('api')->plainTextToken;
