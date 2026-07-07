@@ -18,6 +18,7 @@ class User extends Authenticatable implements MustVerifyEmail
         'name',
         'email',
         'password',
+        'google_id',
         'api_key',
         'role',
         'status',
@@ -172,7 +173,7 @@ class User extends Authenticatable implements MustVerifyEmail
                 }
                 return \App\Models\Domain::query()
                     ->whereKey($domain->id)
-                    ->whereIn('id', fn ($q) => $q->select('domain_id')->from('domain_access')->where('user_id', $this->id))
+                    ->whereIn('id', fn($q) => $q->select('domain_id')->from('domain_access')->where('user_id', $this->id))
                     ->exists();
             }
         }

@@ -190,8 +190,14 @@ Route::prefix('v1')->middleware('api.key')->group(function () {
     Route::prefix('auth')->name('auth.')->group(function () {
         Route::post('register', RegisterController::class)->name('register');
         Route::post('login', LoginController::class)->name('login')->middleware('throttle:10,1');
+        Route::get('google/redirect', [\App\Http\Controllers\Auth\GoogleController::class, 'redirect'])
+            ->name('google.redirect')
+            ->withoutMiddleware('api.key');
+        Route::get('google/callback', [\App\Http\Controllers\Auth\GoogleController::class, 'callback'])
+            ->name('google.callback')
+            ->withoutMiddleware('api.key');
 
-        // 2FA challenge (pre-auth â€” no sanctum guard yet)
+        // 2FA challenge (pre-auth — no sanctum guard yet)
         Route::post('two-factor/verify', [TwoFactorController::class, 'verifyChallenge'])
             ->name('two-factor.verify')
             ->middleware('throttle:5,15');
