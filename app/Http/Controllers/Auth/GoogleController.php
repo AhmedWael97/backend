@@ -9,6 +9,7 @@ use App\Models\Subscription;
 use App\Models\User;
 use App\Models\Plan;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Str;
 use Laravel\Socialite\Facades\Socialite;
 
@@ -66,16 +67,76 @@ class GoogleController extends Controller
         return redirect()->away($redirectUrl);
     }
 
+    /**
+     * Google One-Tap / GSI: the browser posts a Google ID token (JWT credential).
+     * Verify it server-side via Google's tokeninfo endpoint, check the audience,
+     * then sign in / register the same way as the OAuth callback. Returns a
+     * bearer token JSON (no redirect) so the SPA can log in in place.
+     */
+    public function oneTap(Request $request)
+    {
+        $credential = trim((string) $request->input('credential'));
+        if ($credential === '') {
+            return $this->error('Missing Google credential.', 422);
+        }
+
+        try {
+            $resp = Http::timeout(10)->get('https://oauth2.googleapis.com/tokeninfo', ['id_token' => $credential]);
+        } catch (\Throwable $e) {
+            return $this->error('Could not verify Google credential.', 502);
+        }
+        if (!$resp->ok()) {
+            return $this->error('Invalid Google credential.', 401);
+        }
+        $p = $resp->json();
+
+        $clientId = config('services.google.client_id');
+        if (!$clientId || ($p['aud'] ?? null) !== $clientId) {
+            return $this->error('Google token audience mismatch.', 401);
+        }
+        $email = $p['email'] ?? null;
+        $googleId = $p['sub'] ?? null;
+        if (!$email || !$googleId) {
+            return $this->error('Google did not provide an email address.', 401);
+        }
+
+        $user = User::where('google_id', $googleId)->orWhere('email', $email)->first();
+        if ($user && !$user->isActive()) {
+            return $this->error('Your account is suspended.', 403);
+        }
+        if (!$user) {
+            $user = $this->createGoogleUser($googleId, $email, $p['name'] ?? null);
+        } elseif (!$user->google_id) {
+            $user->google_id = $googleId;
+            $user->save();
+        }
+        if (!$user->hasVerifiedEmail()) {
+            $user->markEmailAsVerified();
+        }
+
+        $token = $user->createToken('api')->plainTextToken;
+
+        return $this->success(['token' => $token, 'user' => $user->fresh()]);
+    }
+
     private function createUserFromGoogle($googleUser): User
     {
-        $email = $googleUser->getEmail();
-        $name = $googleUser->getName() ?: ucfirst(explode('@', $email)[0]);
+        return $this->createGoogleUser(
+            $googleUser->getId(),
+            $googleUser->getEmail(),
+            $googleUser->getName()
+        );
+    }
+
+    private function createGoogleUser(string $googleId, string $email, ?string $name): User
+    {
+        $name = $name ?: ucfirst(explode('@', $email)[0]);
 
         $user = User::create([
             'name' => $name,
             'email' => $email,
             'password' => null,
-            'google_id' => $googleUser->getId(),
+            'google_id' => $googleId,
             'api_key' => Str::random(64),
             'locale' => 'en',
             'timezone' => 'UTC',

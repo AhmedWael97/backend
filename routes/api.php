@@ -196,6 +196,9 @@ Route::prefix('v1')->middleware('api.key')->group(function () {
         Route::get('google/callback', [\App\Http\Controllers\Auth\GoogleController::class, 'callback'])
             ->name('google.callback')
             ->withoutMiddleware('api.key');
+        Route::post('google/one-tap', [\App\Http\Controllers\Auth\GoogleController::class, 'oneTap'])
+            ->name('google.one-tap')
+            ->middleware('throttle:20,1');
 
         // 2FA challenge (pre-auth — no sanctum guard yet)
         Route::post('two-factor/verify', [TwoFactorController::class, 'verifyChallenge'])
