@@ -187,6 +187,11 @@ Route::prefix('v1')->middleware('api.key')->group(function () {
     | Public auth routes
     |--------------------------------------------------------------------------
     */
+    // Public contact form
+    Route::post('contact', [\App\Http\Controllers\ContactController::class, 'store'])
+        ->name('contact')
+        ->middleware('throttle:10,1');
+
     Route::prefix('auth')->name('auth.')->group(function () {
         Route::post('register', RegisterController::class)->name('register');
         Route::post('login', LoginController::class)->name('login')->middleware('throttle:10,1');
@@ -593,6 +598,13 @@ Route::prefix('v1')->middleware('api.key')->group(function () {
 
         // Experience feedback results
         Route::get('feedback', [\App\Http\Controllers\Admin\AdminFeedbackController::class, 'index'])->name('feedback');
+
+        // Contact-form messages
+        Route::prefix('contact-messages')->name('contact-messages.')->group(function () {
+            Route::get('/', [\App\Http\Controllers\Admin\AdminContactController::class, 'index'])->name('index');
+            Route::post('{id}/read', [\App\Http\Controllers\Admin\AdminContactController::class, 'markRead'])->name('read');
+            Route::delete('{id}', [\App\Http\Controllers\Admin\AdminContactController::class, 'destroy'])->name('destroy');
+        });
 
         // Email campaigns (broadcast to a user segment)
         Route::get('email/audiences', [\App\Http\Controllers\Admin\AdminEmailController::class, 'audiences'])->name('email.audiences');
