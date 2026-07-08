@@ -40,6 +40,6 @@ class ContactController extends Controller
             }
         }
 
-        return $this->success(['id' => $message->id], 'Message sent.');
+        return $this->success(['id' => $message->id, 'sent' => true]);
     }
 }
