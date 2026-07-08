@@ -112,9 +112,9 @@ class LeadController extends Controller
     public function warm(Request $request, ClickHouseService $ch): JsonResponse
     {
         $user = $request->user();
-        $domainIds = $user->isSuperAdmin()
-            ? Domain::query()->pluck('id')->all()
-            : $user->domains()->pluck('id')->all();
+        // Use centralised access (superadmin→all, owner→own, org member→granted)
+        // so multi-tenant users get warm leads for every site they can see.
+        $domainIds = Domain::accessibleBy($user)->pluck('id')->all();
 
         if (empty($domainIds)) {
             return $this->success(['created' => 0, 'leads' => []]);
