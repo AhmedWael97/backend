@@ -192,6 +192,16 @@ Route::prefix('v1')->middleware('api.key')->group(function () {
         ->name('contact')
         ->middleware('throttle:10,1');
 
+    // Public support chat for logged-out website visitors
+    Route::prefix('support/guest')->name('support.guest.')->group(function () {
+        Route::post('chat', [\App\Http\Controllers\GuestSupportChatController::class, 'start'])
+            ->name('start')->middleware('throttle:5,1');
+        Route::get('chat/{token}', [\App\Http\Controllers\GuestSupportChatController::class, 'show'])
+            ->name('show')->middleware('throttle:120,1');
+        Route::post('chat/{token}/messages', [\App\Http\Controllers\GuestSupportChatController::class, 'send'])
+            ->name('send')->middleware('throttle:30,1');
+    });
+
     Route::prefix('auth')->name('auth.')->group(function () {
         Route::post('register', RegisterController::class)->name('register');
         Route::post('login', LoginController::class)->name('login')->middleware('throttle:10,1');

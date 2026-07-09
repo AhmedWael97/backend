@@ -23,8 +23,9 @@ class AdminSupportChatController extends Controller
             'status' => $c->status,
             'unread_for_admin' => $c->unread_for_admin,
             'last_message_at' => $c->last_message_at,
-            'user_name' => $c->user?->name,
-            'user_email' => $c->user?->email,
+            'user_name' => $c->displayName(),
+            'user_email' => $c->displayEmail(),
+            'is_guest' => $c->user_id === null,
         ]);
 
         return $this->success([
@@ -84,8 +85,9 @@ class AdminSupportChatController extends Controller
         return [
             'id' => $chat->id,
             'status' => $chat->status,
-            'user_name' => $chat->user?->name,
-            'user_email' => $chat->user?->email,
+            'user_name' => $chat->displayName(),
+            'user_email' => $chat->displayEmail(),
+            'is_guest' => $chat->user_id === null,
             'messages' => $chat->messages()->orderBy('id')->get()
                 ->map(fn (SupportMessage $m) => [
                     'id' => $m->id,
