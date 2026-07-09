@@ -15,6 +15,9 @@ class GeminiService
     private string $key;
     private string $model;
 
+    /** HTTP status of the last failed call (429 = quota exhausted), null when OK. */
+    public ?int $lastStatus = null;
+
     public function __construct()
     {
         $this->key = (string) config('services.gemini.key');
@@ -29,6 +32,7 @@ class GeminiService
     /** Return generated text, or null on any failure. */
     public function generate(string $prompt): ?string
     {
+        $this->lastStatus = null;
         if (!$this->configured()) {
             return null;
         }
@@ -41,6 +45,7 @@ class GeminiService
                     'generationConfig' => ['temperature' => 0.4, 'maxOutputTokens' => 800],
                 ]);
             if ($res->failed()) {
+                $this->lastStatus = $res->status();
                 Log::warning('Gemini failed', ['status' => $res->status(), 'body' => substr($res->body(), 0, 300)]);
                 return null;
             }
