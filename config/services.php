@@ -62,9 +62,15 @@ return [
         'token' => env('IPINFO_TOKEN'),
     ],
 
+    // Failover order for AiTextService. Providers without a key are skipped.
+    'ai' => [
+        'order' => env('AI_PROVIDER_ORDER', 'anthropic,gemini,openai'),
+    ],
+
     'gemini' => [
         'key' => env('GEMINI_API_KEY'),
-        'model' => env('GEMINI_MODEL', 'gemini-2.0-flash'),
+        // 2.0-flash has a zeroed free tier on some projects; 2.5-flash works.
+        'model' => env('GEMINI_MODEL', 'gemini-2.5-flash'),
     ],
 
     'google' => [

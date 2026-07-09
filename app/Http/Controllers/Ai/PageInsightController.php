@@ -4,8 +4,8 @@ namespace App\Http\Controllers\Ai;
 
 use App\Http\Controllers\Controller;
 use App\Models\Domain;
+use App\Services\AiTextService;
 use App\Services\ClickHouseService;
-use App\Services\GeminiService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
@@ -62,7 +62,7 @@ class PageInsightController extends Controller
         }
     }
 
-    public function __invoke(Request $request, GeminiService $gemini, int $domainId): JsonResponse
+    public function __invoke(Request $request, AiTextService $ai, int $domainId): JsonResponse
     {
         $user = $request->user();
         $domain = Domain::findOrFail($domainId);
@@ -89,10 +89,6 @@ class PageInsightController extends Controller
         $locale = $validated['locale'] ?? 'en';
         $data = $validated['data'];
 
-        if (!$gemini->configured()) {
-            return $this->error('AI is not configured.', 503);
-        }
-
         $json = json_encode($data, JSON_UNESCAPED_UNICODE | JSON_PARTIAL_OUTPUT_ON_ERROR);
         if (strlen($json) > 60000) {
             return $this->error('Too much data to analyse.', 422);
@@ -103,10 +99,10 @@ class PageInsightController extends Controller
             return $this->success($hit + ['cached' => true]);
         }
 
-        $insight = $this->ask($gemini, $page, $locale, $json);
+        $insight = $this->ask($ai, $page, $locale, $json);
         if (!$insight) {
-            if ($gemini->lastStatus === 429) {
-                return $this->error('AI is busy (daily quota reached). Try again later.', 429);
+            if ($ai->quotaExhausted) {
+                return $this->error('AI is busy (all providers rate-limited). Try again later.', 429);
             }
 
             return $this->error('AI could not analyse this page right now.', 503);
@@ -117,7 +113,7 @@ class PageInsightController extends Controller
         return $this->success($insight + ['cached' => false]);
     }
 
-    private function ask(GeminiService $gemini, string $page, string $locale, string $json): ?array
+    private function ask(AiTextService $ai, string $page, string $locale, string $json): ?array
     {
         $context = self::PAGES[$page] ?? $page;
         $lang = $locale === 'ar'
@@ -151,10 +147,11 @@ class PageInsightController extends Controller
         {$json}
         PROMPT;
 
-        $text = $gemini->generate($prompt);
-        if (!$text) {
+        $result = $ai->generate($prompt);
+        if (!$result) {
             return null;
         }
+        $text = $result['text'];
 
         $text = preg_replace('/^```(?:json)?\s*/m', '', $text);
         $text = preg_replace('/\s*```$/m', '', $text);
@@ -172,6 +169,7 @@ class PageInsightController extends Controller
             'actions' => array_values(array_filter(array_map('strval', (array) ($parsed['actions'] ?? [])))),
             'confidence' => in_array($parsed['confidence'] ?? '', ['high', 'medium', 'low'], true)
                 ? $parsed['confidence'] : 'medium',
+            'provider' => $result['provider'],
             'generated_at' => now()->toIso8601String(),
         ];
     }
