@@ -344,6 +344,13 @@ Route::prefix('v1')->middleware('api.key')->group(function () {
             Route::post('{id}/messages', [UpgradeTicketController::class, 'reply'])->name('reply')->middleware('throttle:60,1');
         });
 
+        // Live customer-service chat (not behind `subscribed` — support must stay reachable)
+        Route::prefix('support')->name('support.')->group(function () {
+            Route::get('chat', [\App\Http\Controllers\SupportChatController::class, 'show'])->name('chat.show');
+            Route::post('chat/messages', [\App\Http\Controllers\SupportChatController::class, 'send'])
+                ->name('chat.send')->middleware('throttle:60,1');
+        });
+
         // Billing
         Route::prefix('billing')->name('billing.')->group(function () {
             Route::get('/', [BillingController::class, 'show'])->name('show');
@@ -601,6 +608,14 @@ Route::prefix('v1')->middleware('api.key')->group(function () {
 
         // Experience feedback results
         Route::get('feedback', [\App\Http\Controllers\Admin\AdminFeedbackController::class, 'index'])->name('feedback');
+
+        // Live customer-service chats
+        Route::prefix('support-chats')->name('support-chats.')->group(function () {
+            Route::get('/', [\App\Http\Controllers\Admin\AdminSupportChatController::class, 'index'])->name('index');
+            Route::get('{id}', [\App\Http\Controllers\Admin\AdminSupportChatController::class, 'show'])->name('show');
+            Route::post('{id}/messages', [\App\Http\Controllers\Admin\AdminSupportChatController::class, 'reply'])->name('reply');
+            Route::post('{id}/close', [\App\Http\Controllers\Admin\AdminSupportChatController::class, 'close'])->name('close');
+        });
 
         // Contact-form messages
         Route::prefix('contact-messages')->name('contact-messages.')->group(function () {

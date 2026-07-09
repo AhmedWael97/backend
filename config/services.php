@@ -67,6 +67,10 @@ return [
         'order' => env('AI_PROVIDER_ORDER', 'anthropic,gemini,openai'),
     ],
 
+    'support' => [
+        'notify_email' => env('SUPPORT_NOTIFY_EMAIL', 'ahmed.wael010166@gmail.com'),
+    ],
+
     'gemini' => [
         'key' => env('GEMINI_API_KEY'),
         // 2.0-flash has a zeroed free tier on some projects; 2.5-flash works.
