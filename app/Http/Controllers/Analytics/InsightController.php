@@ -34,6 +34,7 @@ class InsightController extends Controller
             "insights:{$domain->id}:{$page}",
             900,
             fn () => match ($page) {
+                'campaigns', 'channels', 'ltv' => $this->engine->marketing($domain->id),
                 default => $this->engine->overview($domain->id),
             }
         );

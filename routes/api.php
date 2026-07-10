@@ -572,9 +572,6 @@ Route::prefix('v1')->middleware('api.key')->group(function () {
             Route::get('reports', [AiController::class, 'reports'])->name('reports');
             Route::post('analyze', [AiController::class, 'analyze'])->name('analyze');
             Route::get('quota', [AiController::class, 'quotaStatus'])->name('quota');
-            Route::post('page-insight', \App\Http\Controllers\Ai\PageInsightController::class)
-                ->name('page-insight')
-                ->middleware('throttle:20,1');
         });
         Route::patch('ai/suggestions/{id}/dismiss', [AiController::class, 'dismissSuggestion'])
             ->name('ai.suggestions.dismiss');

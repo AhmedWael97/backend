@@ -38,6 +38,61 @@ class InsightEngine
         return array_values($findings);
     }
 
+    /**
+     * Marketing pages (campaigns / channels / ltv): join tracked revenue
+     * (conversions) to ad spend (ad_spend) per channel and surface money moves —
+     * wasted spend, winners to scale, untracked spend.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    public function marketing(int $domainId): array
+    {
+        $channels = $this->revenueVsSpend($domainId, 30);
+
+        $findings = [];
+        foreach ($channels as $c) {
+            $medium = $c['medium'];
+            $spend = $c['spend'];
+            $revenue = $c['revenue'];
+            $roas = $spend > 0 ? $revenue / $spend : null;
+
+            if ($spend >= 10 && $roas !== null && $roas < 1) {
+                $findings[] = [
+                    'kind' => 'wasted_spend',
+                    'severity' => $roas < 0.5 ? 'critical' : 'warning',
+                    'title' => sprintf('"%s" is losing money — %.2f× ROAS', $medium, $roas),
+                    'detail' => sprintf('Spent %s, made back only %s in the last 30 days.', $this->money($spend), $this->money($revenue)),
+                    'action' => "Pause or cut the budget on \"{$medium}\" until the ad or landing page is fixed.",
+                    'impact' => ($spend - $revenue) * 3,
+                ];
+            } elseif ($spend >= 5 && $roas !== null && $roas >= 3) {
+                $findings[] = [
+                    'kind' => 'scale_winner',
+                    'severity' => 'good',
+                    'title' => sprintf('"%s" is a winner — %.2f× ROAS', $medium, $roas),
+                    'detail' => sprintf('Every %s spent returned %s. It has room to scale.', $this->money(1), $this->money($roas)),
+                    'action' => "Increase budget on \"{$medium}\" gradually while ROAS holds.",
+                    'impact' => $revenue * 1.5,
+                ];
+            } elseif ($revenue > 0 && $spend == 0 && !in_array($medium, ['(direct)', 'organic', '(none)', ''], true)) {
+                $findings[] = [
+                    'kind' => 'untracked_spend',
+                    'severity' => 'info',
+                    'title' => sprintf('"%s" drove %s with no recorded spend', $medium, $this->money($revenue)),
+                    'detail' => 'Without its cost, you cannot tell if this channel is actually profitable.',
+                    'action' => "Add \"{$medium}\" spend (manually or CSV) so its true ROAS shows.",
+                    'impact' => $revenue * 0.2,
+                ];
+            }
+        }
+
+        usort($findings, fn ($a, $b) => $b['impact'] <=> $a['impact']);
+
+        // If there's no revenue/spend signal yet, marketing pages still benefit
+        // from the traffic-level findings.
+        return $findings ?: $this->overview($domainId);
+    }
+
     // ── Detectors ─────────────────────────────────────────────────────────────
 
     /** Today's visitors vs the mean/σ of the same weekday over the prior 4 weeks. */
@@ -297,6 +352,70 @@ class InsightEngine
             'action' => 'Check what changed 7 days ago: a new page, a slower load, or a traffic source sending less-interested visitors.',
             'impact' => abs($pct) * 30,
         ];
+    }
+
+    /**
+     * Revenue per channel (tracked conversions, attributed by the converting
+     * session's medium) joined to ad spend. Two small queries + a PHP join —
+     * conversions are low-volume, so this stays cheap.
+     *
+     * @return array<int, array{medium: string, revenue: float, orders: int, spend: float}>
+     */
+    private function revenueVsSpend(int $domainId, int $days): array
+    {
+        $convs = $this->ch->select("
+            SELECT session_id, sum(value) AS v, count() AS orders
+            FROM conversions
+            WHERE domain_id = {$domainId} AND session_id != '' AND ts >= now() - INTERVAL {$days} DAY
+            GROUP BY session_id
+        ");
+        if (empty($convs)) {
+            return [];
+        }
+
+        $ids = array_map(fn ($r) => "'" . str_replace("'", '', (string) $r['session_id']) . "'", $convs);
+        $inList = implode(',', array_slice($ids, 0, 5000));
+
+        $mediumRows = $this->ch->select("
+            SELECT session_id,
+                if(any(utm_medium) != '', any(utm_medium),
+                   if(any(referrer) != '', domain(any(referrer)), '(direct)')) AS medium
+            FROM events
+            WHERE domain_id = {$domainId} AND session_id IN ({$inList})
+            GROUP BY session_id
+        ");
+        $mediumOf = [];
+        foreach ($mediumRows as $r) {
+            $mediumOf[(string) $r['session_id']] = (string) $r['medium'];
+        }
+
+        $byMedium = [];
+        foreach ($convs as $r) {
+            $m = $mediumOf[(string) $r['session_id']] ?? '(direct)';
+            $byMedium[$m] ??= ['medium' => $m, 'revenue' => 0.0, 'orders' => 0, 'spend' => 0.0];
+            $byMedium[$m]['revenue'] += (float) $r['v'];
+            $byMedium[$m]['orders'] += (int) $r['orders'];
+        }
+
+        // Spend per medium from PostgreSQL.
+        $spend = \Illuminate\Support\Facades\DB::table('ad_spend')
+            ->selectRaw("lower(coalesce(nullif(medium, ''), source, '(none)')) AS medium, sum(spend) AS spend")
+            ->where('domain_id', $domainId)
+            ->where('date', '>=', now()->subDays($days)->toDateString())
+            ->groupBy('medium')
+            ->get();
+        foreach ($spend as $s) {
+            $m = (string) $s->medium;
+            $byMedium[$m] ??= ['medium' => $m, 'revenue' => 0.0, 'orders' => 0, 'spend' => 0.0];
+            $byMedium[$m]['spend'] += (float) $s->spend;
+        }
+
+        return array_values($byMedium);
+    }
+
+    private function money(float $n): string
+    {
+        return number_format($n, $n >= 100 ? 0 : 2);
     }
 
     // ── Data + math helpers ───────────────────────────────────────────────────
