@@ -231,8 +231,10 @@ Route::prefix('v1')->middleware('api.key')->group(function () {
     Route::get('auth/email/verify/{id}/{hash}', [EmailVerificationController::class, 'verify'])
         ->name('verification.verify');
 
-    // One-click unsubscribe (signed URL, no auth required)
-    Route::get('notifications/unsubscribe/{token}', [NotificationPreferenceController::class, 'unsubscribe'])
+    // One-click unsubscribe (signed URL, no auth required). The controller
+    // reads `type`/`user` from the query string (part of what the signature
+    // covers) — there is no path token, despite the old route implying one.
+    Route::get('notifications/unsubscribe', [NotificationPreferenceController::class, 'unsubscribe'])
         ->name('notifications.unsubscribe');
 
     // Public shared report

@@ -387,10 +387,9 @@ namespace App\Http\Controllers;
  * )
  *
  * @OA\Get(
- *   path="/api/v1/notifications/unsubscribe/{token}",
+ *   path="/api/v1/notifications/unsubscribe",
  *   summary="One-click email unsubscribe via signed URL",
  *   tags={"Notifications"},
- *   @OA\Parameter(name="token", in="path", required=true, @OA\Schema(type="string")),
  *   @OA\Parameter(name="type",  in="query", required=true, @OA\Schema(type="string")),
  *   @OA\Parameter(name="user",  in="query", required=true, @OA\Schema(type="integer")),
  *   @OA\Response(response=200, description="Unsubscribed")

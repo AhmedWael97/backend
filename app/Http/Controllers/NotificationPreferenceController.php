@@ -42,9 +42,9 @@ class NotificationPreferenceController extends Controller
 
     /**
      * One-click unsubscribe from email notifications via signed link.
-     * GET /api/notifications/unsubscribe/{token}
+     * GET /api/notifications/unsubscribe?user=&type=&signature=&expires=
      */
-    public function unsubscribe(Request $request, string $token): JsonResponse
+    public function unsubscribe(Request $request): JsonResponse
     {
         if (!$request->hasValidSignature()) {
             abort(403, 'Invalid or expired unsubscribe link.');
