@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Auth;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Auth\RegisterRequest;
 use App\Models\Plan;
+use App\Models\Referral;
 use App\Models\Subscription;
 use App\Models\User;
 use Illuminate\Auth\Events\Registered;
@@ -48,7 +49,10 @@ class RegisterController extends Controller
             'appearance' => 'system',
             'role' => 'user',
             'status' => 'active',
+            'referral_code' => User::generateReferralCode(),
         ]);
+
+        Referral::maybeCreate($request->input('referral_code'), $user);
 
         // Attach a 30-day free trial on the free plan. After `current_period_end`
         // the subscription is no longer "active" (see User::activeSubscription),
@@ -78,6 +82,14 @@ class RegisterController extends Controller
             // Send the "account created — activate it" email as a QUEUED job, out of
             // the request cycle. Signup can never fail on a mail transport error.
             \App\Jobs\SendVerificationEmail::dispatch($user->id);
+        }
+
+        // WelcomeMail existed but was never dispatched from either register path —
+        // queued + best-effort so a mail-transport hiccup can't fail signup.
+        try {
+            \Illuminate\Support\Facades\Mail::to($user->email)->queue(new \App\Mail\WelcomeMail($user));
+        } catch (\Throwable $e) {
+            report($e);
         }
 
         $token = $user->createToken('api')->plainTextToken;

@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Auth;
 use App\Http\Controllers\Controller;
 use App\Models\OrganizationInvitation;
 use App\Models\OrganizationMember;
+use App\Models\Referral;
 use App\Models\Subscription;
 use App\Models\User;
 use App\Models\Plan;
@@ -51,7 +52,11 @@ class GoogleController extends Controller
         }
 
         if (!$user) {
-            $user = $this->createUserFromGoogle($googleUser);
+            // The referral code (if any) rides inside the redirect URL's own
+            // query string — it was appended client-side before starting the
+            // OAuth trip, so it survives the round-trip through `state` untouched.
+            parse_str((string) parse_url($redirect, PHP_URL_QUERY), $redirectParams);
+            $user = $this->createUserFromGoogle($googleUser, $redirectParams['ref'] ?? null);
         } elseif (!$user->google_id) {
             $user->google_id = $googleId;
             $user->save();
@@ -105,7 +110,7 @@ class GoogleController extends Controller
             return $this->error('Your account is suspended.', 403);
         }
         if (!$user) {
-            $user = $this->createGoogleUser($googleId, $email, $p['name'] ?? null);
+            $user = $this->createGoogleUser($googleId, $email, $p['name'] ?? null, $request->input('referral_code'));
         } elseif (!$user->google_id) {
             $user->google_id = $googleId;
             $user->save();
@@ -119,16 +124,17 @@ class GoogleController extends Controller
         return $this->success(['token' => $token, 'user' => $user->fresh()]);
     }
 
-    private function createUserFromGoogle($googleUser): User
+    private function createUserFromGoogle($googleUser, ?string $referralCode = null): User
     {
         return $this->createGoogleUser(
             $googleUser->getId(),
             $googleUser->getEmail(),
-            $googleUser->getName()
+            $googleUser->getName(),
+            $referralCode
         );
     }
 
-    private function createGoogleUser(string $googleId, string $email, ?string $name): User
+    private function createGoogleUser(string $googleId, string $email, ?string $name, ?string $referralCode = null): User
     {
         $name = $name ?: ucfirst(explode('@', $email)[0]);
 
@@ -143,13 +149,21 @@ class GoogleController extends Controller
             'appearance' => 'system',
             'role' => 'user',
             'status' => 'active',
+            'referral_code' => User::generateReferralCode(),
         ]);
 
+        Referral::maybeCreate($referralCode, $user);
         $this->createTrialSubscription($user);
         $this->acceptPendingInvitations($user);
 
         if (!config('app.email_verification_enabled', false)) {
             $user->markEmailAsVerified();
+        }
+
+        try {
+            \Illuminate\Support\Facades\Mail::to($user->email)->queue(new \App\Mail\WelcomeMail($user));
+        } catch (\Throwable $e) {
+            report($e);
         }
 
         return $user;

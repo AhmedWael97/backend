@@ -19,6 +19,7 @@ class RegisterRequest extends FormRequest
             'password' => ['required', 'string', 'min:8'],
             'locale' => ['sometimes', 'string', 'in:en,ar'],
             'timezone' => ['sometimes', 'string', 'timezone:all'],
+            'referral_code' => ['sometimes', 'nullable', 'string', 'max:20'],
         ];
     }
 }

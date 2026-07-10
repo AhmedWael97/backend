@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use Illuminate\Support\Str;
 use Laravel\Sanctum\HasApiTokens;
 
 class User extends Authenticatable implements MustVerifyEmail
@@ -31,6 +32,7 @@ class User extends Authenticatable implements MustVerifyEmail
         'totp_last_used_at',
         'ai_tokens',
         'ai_free_used',
+        'referral_code',
     ];
 
     protected $hidden = [
@@ -71,6 +73,16 @@ class User extends Authenticatable implements MustVerifyEmail
     public function subscription(): HasOne
     {
         return $this->hasOne(Subscription::class)->latestOfMany();
+    }
+
+    /** Short, unique, human-shareable referral code — used by both register paths. */
+    public static function generateReferralCode(): string
+    {
+        do {
+            $code = strtoupper(Str::random(8));
+        } while (self::where('referral_code', $code)->exists());
+
+        return $code;
     }
 
     /**

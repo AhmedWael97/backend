@@ -104,6 +104,11 @@ Route::prefix('v1')->middleware('api.key')->group(function () {
         ->name('tools.seo-check')
         ->middleware(['auth:sanctum', 'throttle:20,1']);
 
+    // Speed checker — public lead-magnet tool, no login required
+    Route::post('tools/speed-check', [\App\Http\Controllers\Tools\SpeedCheckerController::class, 'check'])
+        ->name('tools.speed-check')
+        ->middleware('throttle:10,1');
+
     // SEO site crawler — crawls all internal links (up to 20 pages)
     Route::post('tools/seo-crawl', [SeoCheckerController::class, 'crawl'])
         ->name('tools.seo-crawl')
@@ -363,6 +368,9 @@ Route::prefix('v1')->middleware('api.key')->group(function () {
             Route::post('chat/messages', [\App\Http\Controllers\SupportChatController::class, 'send'])
                 ->name('chat.send')->middleware('throttle:60,1');
         });
+
+        // Invite & earn (not behind `subscribed` — a trial-expired user can still invite)
+        Route::get('referrals', [\App\Http\Controllers\ReferralController::class, 'index'])->name('referrals');
 
         // Billing
         Route::prefix('billing')->name('billing.')->group(function () {
