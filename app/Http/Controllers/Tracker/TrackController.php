@@ -157,7 +157,13 @@ class TrackController extends Controller
                 'ts' => $ts,
             ];
 
-            ProcessTrackingEvent::dispatch($payload)->onQueue('tracking');
+            // Ingestion must never 500: the tracker doesn't retry, so a thrown
+            // exception here silently drops the event. Log and move on instead.
+            try {
+                ProcessTrackingEvent::dispatch($payload)->onQueue('tracking');
+            } catch (\Throwable $e) {
+                report($e);
+            }
         }
 
         return response('', 204, $corsHeaders);
@@ -244,7 +250,7 @@ class TrackController extends Controller
         if ($value === null) {
             return null;
         }
-        $url = substr(trim((string) $value), 0, 2048);
+        $url = $this->cleanUtf8(mb_substr(trim((string) $value), 0, 2048));
         return filter_var($url, FILTER_VALIDATE_URL) !== false ? $url : null;
     }
 
@@ -253,7 +259,24 @@ class TrackController extends Controller
         if ($value === null) {
             return null;
         }
-        return substr(strip_tags((string) $value), 0, $maxLen);
+        return $this->cleanUtf8(mb_substr(strip_tags((string) $value), 0, $maxLen));
+    }
+
+    /**
+     * Byte-based substr() on a multi-byte string can slice a UTF-8 character in
+     * half, producing invalid UTF-8 that later crashes json_encode() when the
+     * event is queued (Illuminate\Queue\InvalidPayloadException) — a 500 the
+     * tracker never retries, silently dropping the event. Re-encoding UTF-8 to
+     * UTF-8 drops any invalid byte sequences instead of choking on them.
+     */
+    private function cleanUtf8(?string $value): ?string
+    {
+        if ($value === null || $value === '') {
+            return $value;
+        }
+        $clean = @mb_convert_encoding($value, 'UTF-8', 'UTF-8');
+
+        return $clean !== false && $clean !== '' ? $clean : null;
     }
 
     private function sanitizeProps(mixed $value): array
@@ -272,7 +295,7 @@ class TrackController extends Controller
             if (is_int($v) || is_float($v)) {
                 $sanitized[$key] = $v;
             } else {
-                $sanitized[$key] = is_scalar($v) ? substr((string) $v, 0, 100) : null;
+                $sanitized[$key] = is_scalar($v) ? $this->cleanUtf8(mb_substr((string) $v, 0, 100)) : null;
             }
         }
         return $sanitized;

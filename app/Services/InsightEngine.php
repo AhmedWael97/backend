@@ -2,6 +2,8 @@
 
 namespace App\Services;
 
+use App\Models\Pipeline;
+
 /**
  * Deterministic "what should I do" engine — analyst-grade findings without an LLM.
  *
@@ -91,6 +93,43 @@ class InsightEngine
         // If there's no revenue/spend signal yet, marketing pages still benefit
         // from the traffic-level findings.
         return $findings ?: $this->overview($domainId);
+    }
+
+    /**
+     * Funnels page: for every pipeline, find the single step with the biggest
+     * session loss, then decompose the drop-off sessions by device/source to
+     * name which segment is actually quitting there.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    public function funnels(int $domainId): array
+    {
+        $pipelines = Pipeline::where('domain_id', $domainId)->with('steps')->get();
+
+        $findings = [];
+        foreach ($pipelines as $pipeline) {
+            $finding = $this->funnelDropFinding($domainId, $pipeline);
+            if ($finding) {
+                $findings[] = $finding;
+            }
+        }
+
+        usort($findings, fn ($a, $b) => $b['impact'] <=> $a['impact']);
+
+        return $findings ?: $this->overview($domainId);
+    }
+
+    /**
+     * Retention page: is week-1 retention improving or decaying, comparing the
+     * most recent cohorts to the ones before them.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    public function retention(int $domainId): array
+    {
+        $finding = $this->retentionTrend($domainId);
+
+        return $finding ? [$finding] : $this->overview($domainId);
     }
 
     // ── Detectors ─────────────────────────────────────────────────────────────
@@ -351,6 +390,207 @@ class InsightEngine
             'detail' => sprintf('Average went from %ds to %ds — visitors are leaving faster than last week.', round($prev), round($cur)),
             'action' => 'Check what changed 7 days ago: a new page, a slower load, or a traffic source sending less-interested visitors.',
             'impact' => abs($pct) * 30,
+        ];
+    }
+
+    /** Biggest single-step session loss in a pipeline, with root-cause decomposition. */
+    private function funnelDropFinding(int $domainId, Pipeline $pipeline): ?array
+    {
+        $steps = $pipeline->steps->values();
+        if ($steps->count() < 2) {
+            return null;
+        }
+
+        $stepIds = $steps->pluck('id')->map(fn ($id) => (int) $id)->all();
+        $inList = implode(',', $stepIds);
+        $rows = $this->ch->select("
+            SELECT step_id, uniq(session_id) AS sessions
+            FROM pipeline_events
+            WHERE domain_id = {$domainId} AND pipeline_id = {$pipeline->id}
+              AND step_id IN ({$inList}) AND event_time >= now() - INTERVAL 30 DAY
+            GROUP BY step_id
+        ");
+        $sessionsByStep = [];
+        foreach ($rows as $r) {
+            $sessionsByStep[(int) $r['step_id']] = (int) $r['sessions'];
+        }
+
+        $worst = null;
+        foreach ($steps as $i => $step) {
+            if ($i === 0) {
+                continue;
+            }
+            $prev = $steps[$i - 1];
+            $prevCount = $sessionsByStep[$prev->id] ?? 0;
+            $curCount = $sessionsByStep[$step->id] ?? 0;
+            if ($prevCount < 20) {
+                continue; // too little volume to trust a percentage
+            }
+            $lost = $prevCount - $curCount;
+            $dropPct = ($lost / $prevCount) * 100;
+            if ($dropPct < 30) {
+                continue; // not a notable drop
+            }
+            if (!$worst || $lost > $worst['lost']) {
+                $worst = compact('prev', 'step', 'prevCount', 'curCount', 'dropPct', 'lost');
+            }
+        }
+        if (!$worst) {
+            return null;
+        }
+
+        $segment = $this->funnelDropSegment($domainId, $pipeline->id, (int) $worst['prev']->id, (int) $worst['step']->id);
+
+        $title = sprintf(
+            '%s: %d%% drop off before "%s"',
+            $pipeline->name,
+            round($worst['dropPct']),
+            $worst['step']->name
+        );
+
+        if ($segment) {
+            $detail = sprintf(
+                'Of %d sessions that reached "%s", %d never continued to "%s" — and %d%% of those who left were %s "%s".',
+                $worst['prevCount'],
+                $worst['prev']->name,
+                $worst['lost'],
+                $worst['step']->name,
+                round($segment['share'] * 100),
+                $segment['label'],
+                $segment['value']
+            );
+            $action = $segment['dim'] === 'device_type'
+                ? "Test the \"{$worst['step']->name}\" step yourself on {$segment['value']} — it is likely broken or confusing there."
+                : "Check what \"{$segment['value']}\" traffic expects vs what \"{$worst['step']->name}\" actually shows — likely a mismatch.";
+        } else {
+            $detail = sprintf(
+                '%d sessions reached "%s"; only %d continued to "%s".',
+                $worst['prevCount'],
+                $worst['prev']->name,
+                $worst['curCount'],
+                $worst['step']->name
+            );
+            $action = "Watch a session replay of someone who dropped at \"{$worst['step']->name}\" to see exactly where they get stuck.";
+        }
+
+        return [
+            'kind' => 'funnel_drop',
+            'severity' => $worst['dropPct'] > 60 ? 'critical' : 'warning',
+            'title' => $title,
+            'detail' => $detail,
+            'action' => $action,
+            'impact' => $worst['lost'] * 3,
+        ];
+    }
+
+    /** Which device/source dominates the sessions that reached $fromStep but not $toStep. */
+    private function funnelDropSegment(int $domainId, int $pipelineId, int $fromStep, int $toStep): ?array
+    {
+        $dropoff = $this->ch->select("
+            SELECT session_id
+            FROM pipeline_events
+            WHERE domain_id = {$domainId} AND pipeline_id = {$pipelineId}
+              AND step_id IN ({$fromStep}, {$toStep}) AND event_time >= now() - INTERVAL 30 DAY
+            GROUP BY session_id
+            HAVING maxIf(1, step_id = {$fromStep}) = 1 AND maxIf(1, step_id = {$toStep}) = 0
+            LIMIT 5000
+        ");
+        $ids = array_map(fn ($r) => "'" . str_replace("'", '', (string) $r['session_id']) . "'", $dropoff);
+        if (count($ids) < 20) {
+            return null;
+        }
+        $inList = implode(',', $ids);
+        $total = count($ids);
+
+        $best = null;
+        foreach (['device_type' => 'device', 'source_medium' => 'source'] as $dim => $label) {
+            $expr = $dim === 'source_medium'
+                ? "if(any(utm_medium) != '', any(utm_medium), if(any(referrer) != '', domain(any(referrer)), '(direct)'))"
+                : "any(device_type)";
+
+            $rows = $this->ch->select("
+                SELECT val, count() AS c FROM (
+                    SELECT session_id, {$expr} AS val
+                    FROM events WHERE domain_id = {$domainId} AND session_id IN ({$inList})
+                    GROUP BY session_id
+                )
+                WHERE val != '' GROUP BY val ORDER BY c DESC LIMIT 1
+            ");
+            if (empty($rows)) {
+                continue;
+            }
+            $share = (int) $rows[0]['c'] / $total;
+            if ($share >= 0.5 && (!$best || $share > $best['share'])) {
+                $best = ['dim' => $dim, 'label' => $label, 'value' => (string) $rows[0]['val'], 'share' => $share];
+            }
+        }
+
+        return $best;
+    }
+
+    /** Week-1 retention: recent cohorts vs the ones just before them. */
+    private function retentionTrend(int $domainId): ?array
+    {
+        $start = now()->subWeeks(9)->startOfWeek()->format('Y-m-d H:i:s');
+
+        $firstSeen = "
+            SELECT visitor_id, toStartOfWeek(min(ts)) AS cohort
+            FROM events WHERE domain_id = {$domainId} AND ts >= '{$start}'
+            GROUP BY visitor_id
+        ";
+        $rows = $this->ch->select("
+            SELECT toString(fs.cohort) AS cohort,
+                uniqIf(fs.visitor_id, dateDiff('week', fs.cohort, toStartOfWeek(e.ts)) = 1) AS returned,
+                uniqExact(fs.visitor_id) AS size
+            FROM ({$firstSeen}) fs
+            LEFT JOIN (
+                SELECT visitor_id, ts FROM events WHERE domain_id = {$domainId} AND ts >= '{$start}'
+            ) e ON e.visitor_id = fs.visitor_id
+            GROUP BY fs.cohort
+            ORDER BY fs.cohort ASC
+        ");
+
+        // Drop the last cohort — it hasn't had a full week to return yet.
+        $rows = array_slice($rows, 0, -1);
+        if (count($rows) < 6) {
+            return null;
+        }
+
+        $pct = array_map(function ($r) {
+            $size = (int) $r['size'];
+
+            return $size > 0 ? ((int) $r['returned'] / $size) * 100 : 0.0;
+        }, $rows);
+
+        $recent = array_slice($pct, -3);
+        $prior = array_slice($pct, -6, 3);
+        [$recentMean] = $this->meanStd($recent);
+        [$priorMean] = $this->meanStd($prior);
+        if ($priorMean < 1e-6) {
+            return null;
+        }
+
+        $deltaPts = $recentMean - $priorMean;
+        if (abs($deltaPts) < 3) {
+            return null; // within noise
+        }
+
+        $down = $deltaPts < 0;
+        $totalRecentVisitors = array_sum(array_map(fn ($r) => (int) $r['size'], array_slice($rows, -3)));
+
+        return [
+            'kind' => 'retention_trend',
+            'severity' => $down ? 'warning' : 'good',
+            'title' => $down
+                ? sprintf('Week-1 return rate falling: %.0f%% → %.0f%%', $priorMean, $recentMean)
+                : sprintf('Week-1 return rate improving: %.0f%% → %.0f%%', $priorMean, $recentMean),
+            'detail' => $down
+                ? 'Newer visitors are less likely to come back a second week than visitors from a few weeks ago — something about the recent experience or traffic quality changed.'
+                : 'Newer cohorts return at a higher rate than before — recent changes are making the site stickier.',
+            'action' => $down
+                ? 'Compare what changed recently: new traffic source, a UX regression, or missing follow-up (email/notifications).'
+                : 'Identify what changed and protect it — this is measurably improving retention.',
+            'impact' => abs($deltaPts) * max(1, $totalRecentVisitors) * 0.5,
         ];
     }
 

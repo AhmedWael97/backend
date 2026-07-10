@@ -35,6 +35,8 @@ class InsightController extends Controller
             900,
             fn () => match ($page) {
                 'campaigns', 'channels', 'ltv' => $this->engine->marketing($domain->id),
+                'funnels' => $this->engine->funnels($domain->id),
+                'retention' => $this->engine->retention($domain->id),
                 default => $this->engine->overview($domain->id),
             }
         );

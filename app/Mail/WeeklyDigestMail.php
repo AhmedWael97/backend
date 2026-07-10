@@ -26,6 +26,7 @@ class WeeklyDigestMail extends BaseNotificationMail
             'topPage' => $this->data['top_page'] ?? '',
             'topCountry' => $this->data['top_country'] ?? '',
             'scoreDelta' => $this->data['score_delta'] ?? null,
+            'findings' => $this->data['findings'] ?? [],
             'dashboardUrl' => config('app.frontend_url') . '/dashboard',
             'unsubscribeUrl' => $this->unsubscribeUrl('weekly_digest'),
         ]);

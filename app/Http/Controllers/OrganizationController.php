@@ -9,6 +9,7 @@ use App\Models\OrganizationMember;
 use App\Models\Plan;
 use App\Models\Subscription;
 use App\Models\User;
+use App\Services\ClickHouseService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -78,13 +79,40 @@ class OrganizationController extends Controller
     }
 
     /** POST /organization — turn the caller into an agency (create org + Agency plan). */
-    public function store(Request $request): JsonResponse
+    /** Real usage floor before the free Agency plan can be self-served. */
+    private const MIN_VISITS_FOR_AGENCY = 50;
+
+    public function store(Request $request, ClickHouseService $clickhouse): JsonResponse
     {
         $user = $request->user();
         $data = $request->validate(['name' => ['required', 'string', 'max:120']]);
 
         if ($user->ownedOrganizations()->exists()) {
             return $this->error('You already have an organization.', 422);
+        }
+
+        // Anti-abuse: the Agency plan is free with no expiry (5 domains, 10 seats)
+        // and bypasses the 30-day trial gate entirely, so a throwaway account could
+        // otherwise self-serve it as a trial-skip. Require a verified email and at
+        // least one domain with real recorded traffic first.
+        if (!$user->hasVerifiedEmail()) {
+            return $this->error('Verify your email before creating an agency workspace.', 403);
+        }
+
+        $domainIds = Domain::where('user_id', $user->id)->pluck('id');
+        $hasTraffic = false;
+        if ($domainIds->isNotEmpty()) {
+            $inList = implode(',', $domainIds->map(fn ($id) => (int) $id)->all());
+            $rows = $clickhouse->select(
+                "SELECT count() AS c FROM events WHERE domain_id IN ({$inList}) AND type = 'pageview'"
+            );
+            $hasTraffic = (int) ($rows[0]['c'] ?? 0) >= self::MIN_VISITS_FOR_AGENCY;
+        }
+        if (!$hasTraffic) {
+            return $this->error(
+                'Connect a domain and get at least ' . self::MIN_VISITS_FOR_AGENCY . ' visits before creating an agency workspace.',
+                403
+            );
         }
 
         $agency = Plan::where('slug', 'agency')->first();
