@@ -80,7 +80,7 @@ class TrackController extends Controller
         }
 
         $ip = $this->resolveClientIp($request);
-        $ua = substr((string) $request->userAgent(), 0, 500);
+        $ua = $this->cleanUtf8(mb_substr((string) $request->userAgent(), 0, 500)) ?? '';
 
         // --- Bot detection: reject headless/automation UAs silently ---
         if ($this->isBot($ua)) {
@@ -339,7 +339,7 @@ class TrackController extends Controller
                 }
             } elseif (!is_object($v) && !array_key_exists($cleanKey, $props)) {
                 // Preserve int/float types so ClickHouse JSONExtractFloat works on page_load data.
-                $props[$cleanKey] = is_int($v) || is_float($v) ? $v : substr((string) $v, 0, 100);
+                $props[$cleanKey] = is_int($v) || is_float($v) ? $v : $this->cleanUtf8(mb_substr((string) $v, 0, 100));
             }
             if (count($props) >= 20) {
                 break;
@@ -371,7 +371,7 @@ class TrackController extends Controller
                 } elseif (is_bool($iv)) {
                     $entry[$cleanKey] = $iv;
                 } elseif (is_string($iv)) {
-                    $entry[$cleanKey] = substr($iv, 0, 200);
+                    $entry[$cleanKey] = $this->cleanUtf8(mb_substr($iv, 0, 200));
                 }
             }
             $result[] = $entry;
