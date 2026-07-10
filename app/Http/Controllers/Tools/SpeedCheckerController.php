@@ -197,7 +197,7 @@ class SpeedCheckerController extends Controller
             'detail' => $cacheControl ? "Cache-Control: {$cacheControl}" : 'No Cache-Control header — repeat visits re-download everything.',
         ];
 
-        $blockingScripts = preg_match_all('/<head[^>]*>.*?<\/head>/is', $html, $headMatch)
+        $blockingScripts = preg_match('/<head[^>]*>.*?<\/head>/is', $html, $headMatch)
             ? preg_match_all('/<script(?![^>]*\b(async|defer)\b)[^>]*\ssrc=/i', $headMatch[0])
             : 0;
         $checks[] = [
