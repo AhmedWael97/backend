@@ -1,8 +1,9 @@
 @extends('emails.layout')
 
 @section('content')
-    <h2>Your Weekly Analytics Summary</h2>
-    <p>Hi {{ $name }}, here's what happened on your site this week:</p>
+    @php($isDaily = ($period ?? 'week') === 'day')
+    <h2>Your {{ $isDaily ? 'Daily' : 'Weekly' }} Analytics Summary</h2>
+    <p>Hi {{ $name }}, here's what happened on your site {{ $isDaily ? 'today' : 'this week' }}:</p>
     <table style="width:100%;border-collapse:collapse;margin:16px 0;">
         <tr>
             <td style="padding:8px 0;color:#71717a;">Visitors</td>
@@ -29,7 +30,7 @@
     </table>
 
     @if (count($findings))
-        <h2 style="margin-top:24px;">What to do this week</h2>
+        <h2 style="margin-top:24px;">What to do {{ $isDaily ? 'today' : 'this week' }}</h2>
         @foreach ($findings as $f)
             <div style="margin:12px 0;padding:12px 14px;border-left:3px solid {{ $f['severity'] === 'critical' ? '#ef4444' : ($f['severity'] === 'warning' ? '#f59e0b' : '#10b981') }};background:#fafafa;">
                 <p style="margin:0 0 4px;font-weight:600;">{{ $f['title'] }} @if(!empty($f['domain']))<span style="color:#71717a;font-weight:400;">— {{ $f['domain'] }}</span>@endif</p>

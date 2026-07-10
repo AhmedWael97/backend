@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Analytics;
 
 use App\Http\Controllers\Controller;
 use App\Models\Domain;
+use App\Models\InsightFeedback;
 use App\Services\InsightEngine;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -49,5 +50,27 @@ class InsightController extends Controller
             'findings' => $findings,
             'count' => count($findings),
         ]);
+    }
+
+    /** POST /analytics/{domainId}/insights/feedback — was this finding helpful? */
+    public function feedback(Request $request, int $domainId): JsonResponse
+    {
+        $domain = Domain::findOrFail($domainId);
+        if (!$request->user()->canAccessDomain($domain)) {
+            return $this->error('Forbidden.', 403);
+        }
+
+        $data = $request->validate([
+            'page' => ['required', 'string', 'max:40'],
+            'kind' => ['required', 'string', 'max:60'],
+            'helpful' => ['required', 'boolean'],
+        ]);
+
+        InsightFeedback::updateOrCreate(
+            ['user_id' => $request->user()->id, 'domain_id' => $domain->id, 'page' => $data['page'], 'kind' => $data['kind']],
+            ['helpful' => $data['helpful']]
+        );
+
+        return $this->success(['saved' => true]);
     }
 }

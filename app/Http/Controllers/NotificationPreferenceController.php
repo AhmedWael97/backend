@@ -18,20 +18,23 @@ class NotificationPreferenceController extends Controller
 
     public function update(Request $request): JsonResponse
     {
-        $data = $request->validate([
+        // The frontend PATCHes a bare array, not {preferences: [...]}.
+        $items = $request->has('preferences') ? $request->input('preferences') : $request->all();
+
+        $data = validator(['preferences' => $items], [
             'preferences' => ['required', 'array'],
             'preferences.*.type' => ['required', 'string'],
             'preferences.*.in_app' => ['required', 'boolean'],
             'preferences.*.email' => ['required', 'boolean'],
-        ]);
+        ])->validate();
 
         foreach ($data['preferences'] as $item) {
-            NotificationPreference::where('user_id', $request->user()->id)
-                ->where('type', $item['type'])
-                ->update([
-                    'in_app' => $item['in_app'],
-                    'email' => $item['email'],
-                ]);
+            // Rows are never pre-seeded, so this must upsert — update-only meant
+            // toggling a preference for the first time silently did nothing.
+            NotificationPreference::updateOrCreate(
+                ['user_id' => $request->user()->id, 'type' => $item['type']],
+                ['in_app' => $item['in_app'], 'email' => $item['email']]
+            );
         }
 
         return $this->success(['message' => 'Preferences updated.']);
@@ -50,9 +53,10 @@ class NotificationPreferenceController extends Controller
         $type = $request->query('type');
         $userId = (int) $request->query('user');
 
-        NotificationPreference::where('user_id', $userId)
-            ->where('type', $type)
-            ->update(['email' => false]);
+        NotificationPreference::updateOrCreate(
+            ['user_id' => $userId, 'type' => $type],
+            ['email' => false]
+        );
 
         return $this->success(["message" => "Unsubscribed from {$type} emails."]);
     }
