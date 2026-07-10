@@ -6,8 +6,10 @@ use App\Http\Controllers\Controller;
 use App\Models\AdSpend;
 use App\Models\Domain;
 use App\Services\ClickHouseService;
+use App\Services\InsightEngine;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Http\Request;
 
 /**
@@ -21,8 +23,23 @@ use Illuminate\Http\Request;
  */
 class PortfolioController extends Controller
 {
-    public function __construct(private ClickHouseService $ch)
+    public function __construct(private ClickHouseService $ch, private InsightEngine $engine)
     {
+    }
+
+    /** GET /portfolio/insights — cross-site deterministic findings (no LLM), cached 15 min. */
+    public function insights(Request $request): JsonResponse
+    {
+        $user = $request->user();
+        $domains = Domain::accessibleBy($user)->get(['id', 'domain']);
+
+        $findings = Cache::remember(
+            'insights:portfolio:' . $user->id,
+            900,
+            fn () => $this->engine->portfolio($domains->map(fn ($d) => ['id' => $d->id, 'domain' => $d->domain])->all())
+        );
+
+        return $this->success(['page' => 'portfolio', 'findings' => $findings, 'count' => count($findings)]);
     }
 
     public function overview(Request $request): JsonResponse
@@ -132,9 +149,7 @@ class PortfolioController extends Controller
         $priorEnd = (clone $start);
         $priorStart = (clone $priorEnd)->subDays($days);
 
-        $domains = $user->isSuperAdmin()
-            ? Domain::query()->get(['id', 'domain'])
-            : $user->domains()->get(['id', 'domain']);
+        $domains = Domain::accessibleBy($user)->get(['id', 'domain']);
 
         $idToName = [];
         foreach ($domains as $d) {

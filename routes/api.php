@@ -259,6 +259,7 @@ Route::prefix('v1')->middleware('api.key')->group(function () {
         Route::prefix('portfolio')->name('portfolio.')->middleware('subscribed')->group(function () {
             Route::get('overview', [PortfolioController::class, 'overview'])->name('overview');
             Route::get('triage', [PortfolioController::class, 'triage'])->name('triage');
+            Route::get('insights', [PortfolioController::class, 'insights'])->name('insights');
         });
 
         // Bulk-apply recommended alert rules to all the user's domains.

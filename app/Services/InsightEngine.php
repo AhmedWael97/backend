@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\Experiment;
 use App\Models\Pipeline;
 
 /**
@@ -128,6 +129,77 @@ class InsightEngine
     public function retention(int $domainId): array
     {
         $finding = $this->retentionTrend($domainId);
+
+        return $finding ? [$finding] : $this->overview($domainId);
+    }
+
+    /**
+     * Experiments page: for every running A/B test, a two-proportion z-test
+     * (same math as ExperimentController) turned into a verdict — declare a
+     * winner, cut a loser, or say honestly there isn't enough data yet.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    public function experiments(int $domainId): array
+    {
+        $running = Experiment::where('domain_id', $domainId)->where('status', 'running')->with('variations')->get();
+
+        $findings = [];
+        foreach ($running as $experiment) {
+            $findings = array_merge($findings, $this->experimentFindings($domainId, $experiment));
+        }
+
+        usort($findings, fn ($a, $b) => $b['impact'] <=> $a['impact']);
+
+        return $findings ?: $this->overview($domainId);
+    }
+
+    /**
+     * Portfolio page: across every domain the user manages, which site's
+     * traffic moved the most from its own normal — the one to check first.
+     *
+     * @param array<int, array{id: int, domain: string}> $domains
+     * @return array<int, array<string, mixed>>
+     */
+    public function portfolio(array $domains): array
+    {
+        $findings = [];
+        foreach ($domains as $d) {
+            $daily = $this->dailyTraffic((int) $d['id'], 28);
+            $finding = $this->trafficAnomaly($daily);
+            if ($finding) {
+                $finding['domain'] = $d['domain'];
+                $findings[] = $finding;
+            }
+        }
+
+        usort($findings, fn ($a, $b) => $b['impact'] <=> $a['impact']);
+
+        return array_slice($findings, 0, 5);
+    }
+
+    /**
+     * Heatmaps page: which exact element on which page attracts the most
+     * rage/dead clicks — the concrete "this button is broken" finding.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    public function heatmaps(int $domainId): array
+    {
+        $finding = $this->frictionHotspot($domainId);
+
+        return $finding ? [$finding] : $this->overview($domainId);
+    }
+
+    /**
+     * SEO page: the keyword whose ranking dropped the most since its last
+     * reading — where organic traffic is actually being lost.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    public function seo(int $domainId): array
+    {
+        $finding = $this->seoRankDrop($domainId);
 
         return $finding ? [$finding] : $this->overview($domainId);
     }
@@ -591,6 +663,190 @@ class InsightEngine
                 ? 'Compare what changed recently: new traffic source, a UX regression, or missing follow-up (email/notifications).'
                 : 'Identify what changed and protect it — this is measurably improving retention.',
             'impact' => abs($deltaPts) * max(1, $totalRecentVisitors) * 0.5,
+        ];
+    }
+
+    /** @return array<int, array<string, mixed>> */
+    private function experimentFindings(int $domainId, Experiment $experiment): array
+    {
+        $safeKey = addslashes($experiment->key);
+
+        $expCte = "
+            SELECT visitor_id, argMin(JSONExtractString(props, 'variant'), ts) AS variant
+            FROM custom_events
+            WHERE domain_id = {$domainId} AND name = 'experiment'
+              AND JSONExtractString(props, 'exp') = '{$safeKey}'
+            GROUP BY visitor_id
+        ";
+        $goalVal = addslashes((string) $experiment->goal_value);
+        if ($experiment->goal_type === 'event' && $goalVal !== '') {
+            $goalCte = "SELECT DISTINCT visitor_id FROM custom_events WHERE domain_id = {$domainId} AND name = '{$goalVal}'";
+        } elseif ($experiment->goal_type === 'url' && $goalVal !== '') {
+            $goalCte = "SELECT DISTINCT visitor_id FROM events WHERE domain_id = {$domainId} AND type = 'pageview' AND url LIKE '%{$goalVal}%'";
+        } else {
+            $goalCte = "SELECT DISTINCT visitor_id FROM conversions WHERE domain_id = {$domainId}";
+        }
+
+        $visitors = [];
+        $converters = [];
+        try {
+            foreach ($this->ch->select("SELECT variant, uniq(visitor_id) AS v FROM ({$expCte}) GROUP BY variant") as $r) {
+                $visitors[(string) $r['variant']] = (int) $r['v'];
+            }
+            foreach ($this->ch->select("
+                SELECT e.variant AS variant, uniq(e.visitor_id) AS c
+                FROM ({$expCte}) AS e INNER JOIN ({$goalCte}) AS g ON e.visitor_id = g.visitor_id
+                GROUP BY variant
+            ") as $r) {
+                $converters[(string) $r['variant']] = (int) $r['c'];
+            }
+        } catch (\Throwable $e) {
+            return [];
+        }
+
+        $control = $experiment->variations->firstWhere('is_control', true) ?? $experiment->variations->first();
+        if (!$control) {
+            return [];
+        }
+        $controlN = $visitors[$control->vkey] ?? 0;
+        $controlC = $converters[$control->vkey] ?? 0;
+        $controlRate = $controlN > 0 ? $controlC / $controlN : 0.0;
+
+        $findings = [];
+        foreach ($experiment->variations as $v) {
+            if ($v->is_control) {
+                continue;
+            }
+            $n = $visitors[$v->vkey] ?? 0;
+            $c = $converters[$v->vkey] ?? 0;
+            $totalN = $controlN + $n;
+            if ($totalN < 100) {
+                continue; // too little traffic for any verdict, significant or not
+            }
+            $rate = $n > 0 ? $c / $n : 0.0;
+            $z = $this->zScore($controlC, $controlN, $c, $n);
+            $uplift = $controlRate > 0 ? (($rate - $controlRate) / $controlRate) * 100 : null;
+            $significant = $z !== null && abs($z) >= 1.96;
+
+            if ($significant && $uplift !== null && $uplift > 0) {
+                $findings[] = [
+                    'kind' => 'experiment_winner',
+                    'severity' => 'good',
+                    'title' => sprintf('"%s" beats control by %.0f%% (95%% confidence)', $v->name, $uplift),
+                    'detail' => sprintf('%d visitors on "%s" converted at %.1f%% vs %.1f%% for control.', $n, $v->name, $rate * 100, $controlRate * 100),
+                    'action' => "Declare \"{$v->name}\" the winner — set it as the new default and end the test.",
+                    'impact' => $totalN * abs($uplift) * 0.5,
+                ];
+            } elseif ($significant && $uplift !== null && $uplift < 0) {
+                $findings[] = [
+                    'kind' => 'experiment_loser',
+                    'severity' => 'warning',
+                    'title' => sprintf('"%s" is underperforming control by %.0f%% (95%% confidence)', $v->name, abs($uplift)),
+                    'detail' => sprintf('%d visitors on "%s" converted at %.1f%% vs %.1f%% for control.', $n, $v->name, $rate * 100, $controlRate * 100),
+                    'action' => "Pause \"{$v->name}\" — it is measurably hurting conversions.",
+                    'impact' => $totalN * abs($uplift) * 0.5,
+                ];
+            } elseif ($totalN >= 400) {
+                $findings[] = [
+                    'kind' => 'experiment_inconclusive',
+                    'severity' => 'info',
+                    'title' => sprintf('"%s" vs control: no clear winner yet after %d visitors', $experiment->name, $totalN),
+                    'detail' => 'The difference so far is not statistically significant — it could be noise.',
+                    'action' => 'Keep running, or the effect may be too small to matter for this goal.',
+                    'impact' => $totalN * 0.05,
+                ];
+            }
+        }
+
+        return $findings;
+    }
+
+    private function zScore(int $c1, int $n1, int $c2, int $n2): ?float
+    {
+        if ($n1 <= 0 || $n2 <= 0) {
+            return null;
+        }
+        $p1 = $c1 / $n1;
+        $p2 = $c2 / $n2;
+        $pooled = ($c1 + $c2) / ($n1 + $n2);
+        $se = sqrt($pooled * (1 - $pooled) * (1 / $n1 + 1 / $n2));
+
+        return $se > 0.0 ? ($p2 - $p1) / $se : null;
+    }
+
+    /** The url + element combo with the most rage/dead clicks in the last 14 days. */
+    private function frictionHotspot(int $domainId): ?array
+    {
+        $rows = $this->ch->select("
+            SELECT url, element_selector, type, count() AS c
+            FROM ux_events
+            WHERE domain_id = {$domainId} AND type IN ('rage_click', 'dead_click')
+              AND created_at >= now() - INTERVAL 14 DAY AND element_selector != ''
+            GROUP BY url, element_selector, type
+            ORDER BY c DESC LIMIT 1
+        ");
+        if (empty($rows) || (int) $rows[0]['c'] < 15) {
+            return null;
+        }
+        $top = $rows[0];
+        $kind = $top['type'] === 'rage_click' ? 'rage clicks' : 'dead clicks';
+        $path = parse_url((string) $top['url'], PHP_URL_PATH) ?: (string) $top['url'];
+
+        return [
+            'kind' => 'friction_hotspot',
+            'severity' => (int) $top['c'] >= 50 ? 'critical' : 'warning',
+            'title' => sprintf('%d %s on one element on %s', (int) $top['c'], $kind, $path),
+            'detail' => $top['type'] === 'rage_click'
+                ? sprintf('Visitors are repeatedly clicking "%s" — a sign it looks clickable but does not respond as expected.', $top['element_selector'])
+                : sprintf('Visitors click "%s" and nothing happens on the page — likely a broken or dead link/button.', $top['element_selector']),
+            'action' => "Open {$path} and test \"{$top['element_selector']}\" yourself — fix the interaction or make it visually clear it's not clickable.",
+            'impact' => (int) $top['c'] * 4,
+        ];
+    }
+
+    /** Keyword with the largest ranking drop since its previous reading. */
+    private function seoRankDrop(int $domainId): ?array
+    {
+        $rows = \Illuminate\Support\Facades\DB::table('seo_rankings')
+            ->where('domain_id', $domainId)
+            ->whereNotNull('position')
+            ->orderBy('keyword')
+            ->orderByDesc('date')
+            ->get(['keyword', 'position', 'date']);
+
+        $byKeyword = [];
+        foreach ($rows as $r) {
+            $byKeyword[$r->keyword] ??= [];
+            if (count($byKeyword[$r->keyword]) < 2) {
+                $byKeyword[$r->keyword][] = (int) $r->position;
+            }
+        }
+
+        $worst = null;
+        foreach ($byKeyword as $keyword => $positions) {
+            if (count($positions) < 2) {
+                continue;
+            }
+            [$latest, $prior] = $positions;
+            $drop = $latest - $prior; // positive = got worse (higher number = lower rank)
+            if ($drop < 5) {
+                continue;
+            }
+            if (!$worst || $drop > $worst['drop']) {
+                $worst = ['keyword' => $keyword, 'latest' => $latest, 'prior' => $prior, 'drop' => $drop];
+            }
+        }
+        if (!$worst) {
+            return null;
+        }
+
+        return [
+            'kind' => 'seo_rank_drop',
+            'severity' => $worst['drop'] >= 15 ? 'critical' : 'warning',
+            'title' => sprintf('"%s" dropped from #%d to #%d', $worst['keyword'], $worst['prior'], $worst['latest']),
+            'detail' => 'A ranking drop this size usually means a competitor outranked you, the page changed, or Google re-evaluated it.',
+            'action' => "Check the page targeting \"{$worst['keyword']}\" for recent content changes, broken links, or lost backlinks.",
+            'impact' => $worst['drop'] * 5,
         ];
     }
 

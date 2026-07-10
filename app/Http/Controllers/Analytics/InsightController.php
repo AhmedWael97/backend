@@ -37,6 +37,9 @@ class InsightController extends Controller
                 'campaigns', 'channels', 'ltv' => $this->engine->marketing($domain->id),
                 'funnels' => $this->engine->funnels($domain->id),
                 'retention' => $this->engine->retention($domain->id),
+                'experiments' => $this->engine->experiments($domain->id),
+                'heatmaps' => $this->engine->heatmaps($domain->id),
+                'seo' => $this->engine->seo($domain->id),
                 default => $this->engine->overview($domain->id),
             }
         );
