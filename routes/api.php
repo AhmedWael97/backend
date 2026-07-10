@@ -484,6 +484,7 @@ Route::prefix('v1')->middleware('api.key')->group(function () {
         |--------------------------------------------------------------------------
         */
         Route::prefix('analytics/{domainId}')->name('analytics2.')->middleware('subscribed')->group(function () {
+            Route::get('insights', [\App\Http\Controllers\Analytics\InsightController::class, 'index'])->name('insights');
             Route::get('identities', [IdentityController::class, 'index'])->name('identities');
             Route::get('identities/{externalId}', [IdentityController::class, 'show'])->name('identities.show');
             Route::get('companies', [CompanyController::class, 'index'])->name('companies');
