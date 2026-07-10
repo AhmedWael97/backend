@@ -116,7 +116,8 @@ class InsightEngine
         }
 
         $down = $slope < 0;
-        $perWeek = round($pctPerDay * 7);
+        // Clamp: a low-traffic mean can inflate the percentage past anything real.
+        $perWeek = (int) max(-95, min(200, round($pctPerDay * 7)));
 
         return [
             'kind' => 'traffic_trend',
@@ -302,10 +303,13 @@ class InsightEngine
 
     private function dailyTraffic(int $domainId, int $days): array
     {
+        // Exclude today: it is a partial day and would fake a crash in the trend
+        // and a low-traffic anomaly every single morning.
         return $this->ch->select("
             SELECT toDate(ts) AS d, uniq(visitor_id) AS visitors, uniq(session_id) AS sessions
             FROM events
-            WHERE domain_id = {$domainId} AND type = 'pageview' AND ts >= today() - {$days}
+            WHERE domain_id = {$domainId} AND type = 'pageview'
+              AND ts >= today() - {$days} AND ts < today()
             GROUP BY d ORDER BY d
         ");
     }
