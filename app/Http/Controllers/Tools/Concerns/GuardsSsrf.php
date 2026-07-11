@@ -50,9 +50,15 @@ trait GuardsSsrf
      */
     protected function fetchWithSafeRedirects(string $url, string $userAgent, int $timeout, int $hopsLeft = 3)
     {
-        $response = Http::withHeaders(['User-Agent' => $userAgent])
+        $response = Http::withHeaders(['User-Agent' => $userAgent, 'Accept-Encoding' => 'gzip'])
             ->timeout($timeout)
-            ->withOptions(['allow_redirects' => false])
+            // decode_content=false stops Guzzle from silently decompressing the
+            // body AND stripping the Content-Encoding header before we ever see
+            // it — without this, a compression check against $response->headers()
+            // always reports "not compressed" even on a correctly-configured
+            // server, because Guzzle already undid it. Body is decompressed by
+            // us explicitly via decompressBody() where the text is needed.
+            ->withOptions(['allow_redirects' => false, 'decode_content' => false])
             ->get($url);
 
         if (in_array($response->status(), [301, 302, 303, 307, 308], true) && $hopsLeft > 0) {
@@ -80,6 +86,32 @@ trait GuardsSsrf
         $host = $baseParts['host'] ?? '';
 
         return str_starts_with($location, '/') ? "{$scheme}://{$host}{$location}" : $location;
+    }
+
+    /**
+     * Decompresses a response body fetched with decode_content=false. Needed
+     * because that option (see fetchWithSafeRedirects) leaves gzip bodies raw
+     * so the Content-Encoding header survives for the compression check.
+     * Un-decodable/unsupported encodings (e.g. brotli without ext-brotli) fall
+     * back to the raw bytes rather than throwing.
+     */
+    protected function decompressBody($response): string
+    {
+        $encoding = strtolower((string) $response->header('Content-Encoding'));
+        $body = $response->body();
+
+        if ($encoding === 'gzip' || $encoding === 'x-gzip') {
+            $decoded = @gzdecode($body);
+
+            return $decoded !== false ? $decoded : $body;
+        }
+        if ($encoding === 'deflate') {
+            $decoded = @gzinflate($body) ?: @gzuncompress($body);
+
+            return $decoded !== false && $decoded !== null ? $decoded : $body;
+        }
+
+        return $body;
     }
 
     /** Scheme + resolvable public host, in one call. */

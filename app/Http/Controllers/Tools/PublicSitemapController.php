@@ -62,7 +62,7 @@ class PublicSitemapController extends Controller
                 continue;
             }
 
-            $html = substr($response->body(), 0, self::MAX_BYTES);
+            $html = substr($this->decompressBody($response), 0, self::MAX_BYTES);
             $depth = substr_count(parse_url($url, PHP_URL_PATH) ?? '/', '/');
             $pages[] = [
                 'url' => $url,

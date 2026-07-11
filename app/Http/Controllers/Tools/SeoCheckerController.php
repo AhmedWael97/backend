@@ -53,7 +53,7 @@ class SeoCheckerController extends Controller
             return $this->error("URL returned HTTP {$response->status()}.", 422);
         }
 
-        $html = substr($response->body(), 0, self::MAX_BYTES);
+        $html = substr($this->decompressBody($response), 0, self::MAX_BYTES);
         $statusCode = $response->status();
         $headers = $response->headers();
 

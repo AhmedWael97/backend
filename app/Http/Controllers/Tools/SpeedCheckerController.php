@@ -47,7 +47,7 @@ class SpeedCheckerController extends Controller
         }
 
         $ttfbMs = $this->extractTtfb($response) ?? $totalMs;
-        $html = substr($response->body(), 0, self::MAX_BYTES);
+        $html = substr($this->decompressBody($response), 0, self::MAX_BYTES);
         $sizeKb = round(strlen($html) / 1024, 1);
         $headers = $response->headers();
 
