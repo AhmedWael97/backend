@@ -7,6 +7,7 @@ use App\Models\Organization;
 use App\Models\OrganizationInvitation;
 use App\Models\OrganizationMember;
 use App\Models\Plan;
+use App\Models\PromoCode;
 use App\Models\Subscription;
 use App\Models\User;
 use App\Services\ClickHouseService;
@@ -336,6 +337,59 @@ class OrganizationController extends Controller
         if ($rows) {
             DB::table('domain_access')->insert($rows);
         }
+    }
+
+    /**
+     * GET /organization/promo-code — the org's self-serve referral code, so an
+     * agency can hand clients a trackable discount instead of a raw signup link.
+     * Auto-generated on first request (10% off, no expiry, no usage cap) — rides
+     * the same discount/redemption rails as an admin-created promo code.
+     */
+    public function promoCode(Request $request): JsonResponse
+    {
+        $user = $request->user();
+        $org = $user->organization();
+        if (!$org) {
+            return $this->error('You are not part of an organization.', 404);
+        }
+
+        $membership = $org->members()->where('user_id', $user->id)->first();
+        $isAdmin = $user->id === $org->owner_user_id || ($membership?->isOwnerOrAdmin() ?? false);
+        if (!$isAdmin) {
+            return $this->error('Only the organization owner/admin can view the referral code.', 403);
+        }
+
+        $promo = PromoCode::firstOrCreate(
+            ['organization_id' => $org->id],
+            [
+                'code' => $this->generateOrgCode($org->name),
+                'campaign_name' => "Agency referral — {$org->name}",
+                'discount_type' => 'percent',
+                'discount_value' => 10,
+                'max_uses' => null,
+                'is_active' => true,
+                'created_by' => $user->id,
+            ]
+        );
+
+        return $this->success([
+            'code' => $promo->code,
+            'discount_type' => $promo->discount_type,
+            'discount_value' => (float) $promo->discount_value,
+            'used_count' => $promo->used_count,
+            'is_active' => $promo->is_active,
+        ]);
+    }
+
+    private function generateOrgCode(string $orgName): string
+    {
+        $base = strtoupper(Str::slug($orgName, '')) ?: 'AGENCY';
+        $base = substr($base, 0, 16);
+        $code = $base . '-' . strtoupper(Str::random(4));
+        while (PromoCode::where('code', $code)->exists()) {
+            $code = $base . '-' . strtoupper(Str::random(4));
+        }
+        return $code;
     }
 
     private function inviteUrl(OrganizationInvitation $invite): string

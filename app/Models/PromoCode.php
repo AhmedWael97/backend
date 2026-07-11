@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class PromoCode extends Model
@@ -10,6 +11,7 @@ class PromoCode extends Model
     protected $fillable = [
         'code', 'campaign_name', 'discount_type', 'discount_value',
         'max_uses', 'used_count', 'expires_at', 'is_active', 'created_by',
+        'organization_id',
     ];
 
     protected function casts(): array
@@ -24,6 +26,11 @@ class PromoCode extends Model
     public function redemptions(): HasMany
     {
         return $this->hasMany(PromoCodeRedemption::class);
+    }
+
+    public function organization(): BelongsTo
+    {
+        return $this->belongsTo(Organization::class);
     }
 
     /** Null = valid; otherwise a user-facing reason it can't be used. */

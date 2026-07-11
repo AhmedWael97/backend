@@ -358,6 +358,7 @@ Route::prefix('v1')->middleware('api.key')->group(function () {
         Route::prefix('organization')->name('organization.')->group(function () {
             Route::get('/', [OrganizationController::class, 'show'])->name('show');
             Route::post('/', [OrganizationController::class, 'store'])->name('store');
+            Route::get('promo-code', [OrganizationController::class, 'promoCode'])->name('promo-code');
             Route::post('invitations', [OrganizationController::class, 'invite'])->name('invite');
             Route::post('invitations/{token}/accept', [OrganizationController::class, 'acceptInvite'])->name('invite.accept');
             Route::delete('invitations/{id}', [OrganizationController::class, 'cancelInvite'])->name('invite.cancel');
