@@ -153,6 +153,7 @@ class PaymobController extends Controller
     {
         $request->validate([
             'plan_id' => ['required', 'integer', 'exists:plans,id'],
+            'promo_code' => ['sometimes', 'nullable', 'string', 'max:40'],
         ]);
 
         // Resolve credentials for the active environment (test/production) set in
@@ -177,6 +178,22 @@ class PaymobController extends Controller
         $user = $request->user();
         $plan = Plan::findOrFail($request->input('plan_id'));
 
+        // ── Optional promo code — validated here (fail fast, before spending a
+        // Paymob API round-trip) but only REDEEMED in the webhook on confirmed
+        // payment, so an abandoned checkout never burns a use.
+        $promo = null;
+        $discountUsd = 0.0;
+        if ($request->filled('promo_code')) {
+            $promo = \App\Models\PromoCode::whereRaw('upper(code) = ?', [strtoupper($request->input('promo_code'))])->first();
+            if (!$promo) {
+                return $this->error('Invalid promo code.', 422);
+            }
+            $reason = $promo->invalidReason($user->id);
+            if ($reason) {
+                return $this->error($reason, 422);
+            }
+        }
+
         // ── 1. Auth token ──────────────────────────────────────────────────
         $authRes = Http::timeout(15)->post($baseUrl . '/auth/tokens', [
             'api_key' => $apiKey,
@@ -198,6 +215,16 @@ class PaymobController extends Controller
         // user was shown (non-EGP users see $, but are charged the EGP equivalent).
         $egpRate = (float) config('services.currency.egp_rate', 60);
         $priceUsd = (float) ($plan->price_monthly ?? 0);
+        if ($promo) {
+            $discountUsd = $promo->discountUsd($priceUsd);
+            $priceUsd = round($priceUsd - $discountUsd, 2);
+            // A 100%-off code would send Paymob a 0-amount charge, which
+            // gateways reject outright — for a full-price-off grant, use the
+            // admin "assign plan" flow instead of a payment gateway.
+            if ($priceUsd < 0.5) {
+                return $this->error('This code fully covers the plan — contact support to activate it directly.', 422);
+            }
+        }
         $amountEgp = round($priceUsd * $egpRate, 2);
         $amountCents = (int) round($amountEgp * 100);
 
@@ -281,6 +308,8 @@ class PaymobController extends Controller
                 'plan_id' => $plan->id,
                 'base_price_usd' => $priceUsd,
                 'egp_rate' => $egpRate,
+                'promo_code_id' => $promo?->id,
+                'promo_discount_usd' => $promo ? $discountUsd : null,
             ],
         ]);
 
@@ -292,6 +321,8 @@ class PaymobController extends Controller
             'payment_id' => $payment->id,
             'amount' => $amountCents,
             'currency' => 'EGP',
+            'promo_applied' => $promo?->code,
+            'discount_usd' => $promo ? $discountUsd : null,
         ]);
     }
 
@@ -380,6 +411,13 @@ class PaymobController extends Controller
                         ]);
                     }
                 }
+
+                // Free up the promo code use if this payment had redeemed one.
+                $redemption = \App\Models\PromoCodeRedemption::where('payment_id', $payment->id)->first();
+                if ($redemption) {
+                    \App\Models\PromoCode::where('id', $redemption->promo_code_id)->decrement('used_count');
+                    $redemption->delete();
+                }
             }
             return response('', 200);
         }
@@ -423,6 +461,25 @@ class PaymobController extends Controller
             foreach ($oldActive as $sub) {
                 if ($sub->id !== $newSubscription->id) {
                     $sub->update(['status' => 'cancelled', 'cancelled_at' => now()]);
+                }
+            }
+
+            // Redeem the promo code only now — on confirmed payment, not at
+            // checkout start, so an abandoned iframe never burns a use.
+            $promoId = (array_merge((array) ($payment->metadata ?? [])))['promo_code_id'] ?? null;
+            if ($promoId) {
+                try {
+                    \App\Models\PromoCodeRedemption::create([
+                        'promo_code_id' => $promoId,
+                        'user_id' => $payment->user_id,
+                        'payment_id' => $payment->id,
+                        'discount_usd' => $payment->metadata['promo_discount_usd'] ?? 0,
+                    ]);
+                    \App\Models\PromoCode::where('id', $promoId)->increment('used_count');
+                } catch (\Throwable $e) {
+                    // Unique constraint (already redeemed) or similar — payment
+                    // still succeeds either way, this is bookkeeping.
+                    report($e);
                 }
             }
         } else {

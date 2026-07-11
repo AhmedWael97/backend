@@ -98,6 +98,7 @@ Route::prefix('v1')->middleware('api.key')->group(function () {
     */
     Route::get('health', HealthController::class)->name('health');
     Route::get('theme', [ThemeController::class, 'show'])->name('theme');
+    Route::get('public/stats', [\App\Http\Controllers\PublicStatsController::class, 'index'])->name('public.stats');
 
     // SEO checker — auth required, rate-limited to prevent abuse
     Route::post('tools/seo-check', [SeoCheckerController::class, 'check'])
@@ -392,6 +393,9 @@ Route::prefix('v1')->middleware('api.key')->group(function () {
             Route::post('paymob/initiate', [PaymobController::class, 'initiate'])
                 ->name('billing.paymob.initiate')
                 ->middleware('throttle:10,1');
+            Route::post('promo/validate', [\App\Http\Controllers\Payment\PromoCodeController::class, 'validateCode'])
+                ->name('promo.validate')
+                ->middleware('throttle:20,1');
         });
 
         // GDPR
@@ -636,6 +640,14 @@ Route::prefix('v1')->middleware('api.key')->group(function () {
     Route::middleware(['auth:sanctum', 'superadmin'])->prefix('admin')->name('admin.')->group(function () {
 
         Route::get('stats', AdminStatsController::class)->name('stats');
+        Route::get('marketing', \App\Http\Controllers\Admin\AdminMarketingController::class)->name('marketing');
+
+        Route::prefix('promo-codes')->name('promo-codes.')->group(function () {
+            Route::get('/', [\App\Http\Controllers\Admin\AdminPromoCodeController::class, 'index'])->name('index');
+            Route::post('/', [\App\Http\Controllers\Admin\AdminPromoCodeController::class, 'store'])->name('store');
+            Route::put('{id}', [\App\Http\Controllers\Admin\AdminPromoCodeController::class, 'update'])->name('update');
+            Route::delete('{id}', [\App\Http\Controllers\Admin\AdminPromoCodeController::class, 'destroy'])->name('destroy');
+        });
 
         // Experience feedback results
         Route::get('feedback', [\App\Http\Controllers\Admin\AdminFeedbackController::class, 'index'])->name('feedback');
