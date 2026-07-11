@@ -104,6 +104,11 @@ Route::prefix('v1')->middleware('api.key')->group(function () {
         ->name('tools.seo-check')
         ->middleware(['auth:sanctum', 'throttle:20,1']);
 
+    // SEO checker — public lead-magnet variant, no login required (same action)
+    Route::post('tools/seo-check-public', [SeoCheckerController::class, 'check'])
+        ->name('tools.seo-check-public')
+        ->middleware('throttle:10,1');
+
     // Speed checker — public lead-magnet tool, no login required
     Route::post('tools/speed-check', [\App\Http\Controllers\Tools\SpeedCheckerController::class, 'check'])
         ->name('tools.speed-check')

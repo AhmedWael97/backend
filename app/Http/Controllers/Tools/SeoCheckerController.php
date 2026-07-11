@@ -3,20 +3,24 @@
 namespace App\Http\Controllers\Tools;
 
 use App\Http\Controllers\Controller;
+use App\Http\Controllers\Tools\Concerns\GuardsSsrf;
+use App\Models\ToolUsageLog;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Str;
 
 /**
- * POST /api/v1/tools/seo-check        — single page check
- * POST /api/v1/tools/seo-crawl        — full-site crawl: follows all internal links
+ * POST /api/v1/tools/seo-check        — single page check (public + authenticated)
+ * POST /api/v1/tools/seo-crawl        — full-site crawl: follows all internal links (authenticated)
  *
  * Fetches the given URL server-side and runs a suite of SEO checks.
  * Returns categorised issues and an overall score (0-100).
  */
 class SeoCheckerController extends Controller
 {
+    use GuardsSsrf;
+
     private const TIMEOUT = 15;
     private const MAX_BYTES = 2 * 1024 * 1024; // 2 MB cap
     private const UA = 'Mozilla/5.0 (compatible; EyeSEOBot/1.0)';
@@ -32,17 +36,17 @@ class SeoCheckerController extends Controller
 
         $url = $request->input('url');
 
-        $scheme = strtolower(parse_url($url, PHP_URL_SCHEME) ?? '');
-        if (!in_array($scheme, ['http', 'https'], true)) {
-            return $this->error('Only http/https URLs are allowed.', 422);
+        if (!$this->isSafeUrl($url)) {
+            return $this->error('This URL cannot be checked.', 422);
         }
 
         try {
-            $response = Http::withHeaders(['User-Agent' => self::UA])
-                ->timeout(self::TIMEOUT)
-                ->get($url);
+            $response = $this->fetchWithSafeRedirects($url, self::UA, self::TIMEOUT);
         } catch (\Throwable $e) {
             return $this->error('Could not reach the URL: ' . $e->getMessage(), 422);
+        }
+        if ($response === null) {
+            return $this->error('This URL cannot be checked.', 422);
         }
 
         if (!$response->successful()) {
@@ -61,6 +65,8 @@ class SeoCheckerController extends Controller
 
         $issues = array_filter($checks, fn($c) => $c['status'] !== 'pass');
         $passing = array_filter($checks, fn($c) => $c['status'] === 'pass');
+
+        ToolUsageLog::log($request, 'seo_checker', $url, $score);
 
         return $this->success([
             'url' => $url,

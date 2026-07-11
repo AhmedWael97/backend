@@ -15,6 +15,14 @@ use Illuminate\Console\Command;
  * column would still say "active" — which is confusing to admins and breaks
  * any admin-side reporting that groups by status.
  *
+ * A lapsed 30-day *trial* (plan slug 'free') converts to a real, permanent
+ * (no current_period_end) subscription on the same free plan — so the account
+ * keeps working forever at free-tier limits instead of hitting a 402 wall.
+ * This is what makes "30-day trial, free forever after" an honest claim rather
+ * than the trial-that-blocks-you copy already fixed once this session. A
+ * lapsed *paid* plan (Pro/Business/Agency) is NOT auto-continued — that is
+ * unpaid revenue, not a trial, and should genuinely block until resubscribed.
+ *
  * Schedule:
  *   $schedule->command('subscriptions:expire')->dailyAt('00:05');
  */
@@ -30,12 +38,26 @@ class ExpireSubscriptionsCommand extends Command
         $expiringSubs = Subscription::where('status', 'active')
             ->whereNotNull('current_period_end')
             ->where('current_period_end', '<=', $now)
+            ->with('plan')
             ->get();
 
         $count = 0;
+        $downgraded = 0;
         foreach ($expiringSubs as $sub) {
             $sub->update(['status' => 'expired']);
             $count++;
+
+            if ($sub->plan?->slug === 'free') {
+                Subscription::create([
+                    'user_id' => $sub->user_id,
+                    'plan_id' => $sub->plan_id,
+                    'status' => 'active',
+                    'current_period_start' => now(),
+                    'current_period_end' => null,
+                    'notes' => 'Free forever (trial converted)',
+                ]);
+                $downgraded++;
+            }
 
             // Best-effort audit log entry; skip if no admin user available.
             $systemAdmin = User::where('role', 'superadmin')->orderBy('id')->first();
@@ -59,7 +81,7 @@ class ExpireSubscriptionsCommand extends Command
             }
         }
 
-        $this->info("Expired {$count} subscription(s).");
+        $this->info("Expired {$count} subscription(s), {$downgraded} converted to free-forever.");
         return self::SUCCESS;
     }
 }

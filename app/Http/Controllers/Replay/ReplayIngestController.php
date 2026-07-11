@@ -52,6 +52,16 @@ class ReplayIngestController extends Controller
             return response('', 401, self::CORS);
         }
 
+        // Session replay is a paid feature. Gate it here rather than at the
+        // tracker-script level (a savvy visitor's browser could still POST
+        // here directly) — but never error to the client, just don't persist,
+        // same "the script always gets 2xx" rule as the main tracker endpoint.
+        $ownerSub = ($domain->organization?->owner ?? $domain->user)?->effectiveSubscription();
+        $canReplay = (bool) ($ownerSub?->plan?->features['session_replay'] ?? false);
+        if (!$canReplay) {
+            return response('', 204, self::CORS);
+        }
+
         $sessionId = $this->sanitizeUuid($body['sid'] ?? null, false);
         $visitorId = $this->sanitizeUuid($body['vid'] ?? null, true);
         $events = is_array($body['events'] ?? null) ? $body['events'] : [];
