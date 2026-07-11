@@ -100,6 +100,11 @@ Route::prefix('v1')->middleware('api.key')->group(function () {
     Route::get('theme', [ThemeController::class, 'show'])->name('theme');
     Route::get('public/stats', [\App\Http\Controllers\PublicStatsController::class, 'index'])->name('public.stats');
 
+    // Exit-intent popup capture (landing/pricing) — public, no login
+    Route::post('marketing/exit-intent', [\App\Http\Controllers\ExitIntentController::class, 'capture'])
+        ->name('marketing.exit-intent')
+        ->middleware('throttle:5,1');
+
     // SEO checker — auth required, rate-limited to prevent abuse
     Route::post('tools/seo-check', [SeoCheckerController::class, 'check'])
         ->name('tools.seo-check')
@@ -273,6 +278,11 @@ Route::prefix('v1')->middleware('api.key')->group(function () {
         // Experience feedback (asked once, post-signup)
         Route::get('feedback/status', [\App\Http\Controllers\FeedbackController::class, 'status'])->name('feedback.status');
         Route::post('feedback', [\App\Http\Controllers\FeedbackController::class, 'store'])->name('feedback.store');
+
+        // NPS (asked once, ~14 days in with a connected domain)
+        Route::get('nps/eligibility', [\App\Http\Controllers\NpsController::class, 'eligibility'])->name('nps.eligibility');
+        Route::post('nps', [\App\Http\Controllers\NpsController::class, 'store'])->name('nps.store');
+        Route::post('nps/dismiss', [\App\Http\Controllers\NpsController::class, 'dismiss'])->name('nps.dismiss');
 
         // Cross-site portfolio (user-scoped, spans all the user's domains)
         Route::prefix('portfolio')->name('portfolio.')->middleware('subscribed')->group(function () {
