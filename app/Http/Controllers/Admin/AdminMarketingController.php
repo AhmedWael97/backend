@@ -76,7 +76,8 @@ class AdminMarketingController extends Controller
             ->groupBy('d')
             ->orderBy('d')
             ->get()
-            ->map(fn ($r) => ['date' => $r->d, 'count' => (int) $r->c]);
+            ->map(fn ($r) => ['date' => $r->d, 'count' => (int) $r->c])
+            ->all();
     }
 
     private function referrals(): array
