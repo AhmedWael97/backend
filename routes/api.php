@@ -114,6 +114,12 @@ Route::prefix('v1')->middleware('api.key')->group(function () {
         ->name('tools.speed-check')
         ->middleware('throttle:10,1');
 
+    // Sitemap creator — public lead-magnet tool, no login required (crawl is
+    // heavier than a single-page check, so a tighter throttle).
+    Route::post('tools/sitemap-check', [\App\Http\Controllers\Tools\PublicSitemapController::class, 'generate'])
+        ->name('tools.sitemap-check')
+        ->middleware('throttle:5,1');
+
     // SEO site crawler — crawls all internal links (up to 20 pages)
     Route::post('tools/seo-crawl', [SeoCheckerController::class, 'crawl'])
         ->name('tools.seo-crawl')
