@@ -32,7 +32,7 @@ class SuggestConnectCheckedDomainsCommand extends Command
             ->where('created_at', '>=', now()->subDays(14))
             ->select('user_id', 'checked_host', DB::raw('count(*) as c'))
             ->groupBy('user_id', 'checked_host')
-            ->having('c', '>=', 2)
+            ->havingRaw('count(*) >= ?', [2])
             ->get();
 
         $sent = 0;
