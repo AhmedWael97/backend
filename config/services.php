@@ -115,4 +115,12 @@ return [
         'account_id' => env('CONVERT_ACCOUNT_ID'),
     ],
 
+    // TikTok Events API — server-side conversion send (complements the client
+    // pixel; survives ad-blockers / in-app-browser quirks). No-ops entirely
+    // if the access token isn't set. Pixel code must match tracker/[locale]/layout.tsx.
+    'tiktok' => [
+        'pixel_code' => env('TIKTOK_PIXEL_ID', 'D8VGP9BC77U550SVNMH0'),
+        'access_token' => env('TIKTOK_EVENTS_ACCESS_TOKEN'), // from TikTok Ads Manager → Events → Web Events → Generate Access Token
+    ],
+
 ];

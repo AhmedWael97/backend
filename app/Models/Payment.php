@@ -25,6 +25,7 @@ class Payment extends Model
         return [
             'metadata' => 'array',
             'paid_at' => 'datetime',
+            'abandoned_nudge_sent_at' => 'datetime',
             'amount' => 'decimal:2',
         ];
     }

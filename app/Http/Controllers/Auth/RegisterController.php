@@ -8,12 +8,17 @@ use App\Models\Plan;
 use App\Models\Referral;
 use App\Models\Subscription;
 use App\Models\User;
+use App\Services\TikTokEventsService;
 use Illuminate\Auth\Events\Registered;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Str;
 
 class RegisterController extends Controller
 {
+    public function __construct(private readonly TikTokEventsService $tiktok)
+    {
+    }
+
     /**
      * @OA\Post(
      *   path="/api/v1/auth/register",
@@ -88,6 +93,20 @@ class RegisterController extends Controller
         // queued + best-effort so a mail-transport hiccup can't fail signup.
         try {
             \Illuminate\Support\Facades\Mail::to($user->email)->queue(new \App\Mail\WelcomeMail($user));
+        } catch (\Throwable $e) {
+            report($e);
+        }
+
+        // Server-side TikTok Events API send — mirrors the client pixel's
+        // CompleteRegistration call with the same event_id (dedup) so a
+        // signup that never sends its beacon (ad-blocker, closed in-app
+        // browser tab) still gets counted. No-ops if not configured.
+        try {
+            $this->tiktok->track('CompleteRegistration', "signup_{$user->id}", [
+                'email' => $user->email,
+                'ip' => $request->ip(),
+                'user_agent' => $request->userAgent(),
+            ]);
         } catch (\Throwable $e) {
             report($e);
         }
