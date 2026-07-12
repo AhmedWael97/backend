@@ -10,11 +10,46 @@ namespace App\Http\Controllers\Analytics\Concerns;
  */
 trait ClassifiesTraffic
 {
+    /**
+     * True when a UTM value is real — not blank, not corrupted (contains the
+     * UTF-8 replacement char, U+FFFD — happens when an ad network's redirect
+     * chain mangles the query string), and not an ad platform's dynamic-tag
+     * placeholder that failed to interpolate (TikTok's "__CAMPAIGN_NAME__",
+     * Meta's "{{campaign.name}}"). Garbage/placeholder values fall through to
+     * referrer-based classification instead of polluting the campaigns list.
+     */
+    protected function isCleanUtmSql(string $col): string
+    {
+        return "{$col} != '' AND position({$col}, unhex('EFBFBD')) = 0"
+            . " AND NOT startsWith({$col}, '__') AND NOT startsWith({$col}, '{')";
+    }
+
+    /** utm_campaign for display — '(not set)' for blank/corrupted/unexploded-macro values. */
+    protected function cleanCampaignSql(): string
+    {
+        $clean = $this->isCleanUtmSql('utm_campaign');
+        return "if({$clean}, utm_campaign, '(not set)')";
+    }
+
     protected function sourceClassificationSql(): string
     {
-        return <<<'SQL'
+        $cleanSource = $this->isCleanUtmSql('utm_source');
+        return <<<SQL
             multiIf(
-                utm_source != '',                                                                                       utm_source,
+                {$cleanSource},
+                    multiIf(
+                        lower(utm_source) IN ('ig', 'instagram'),                                          'Instagram',
+                        lower(utm_source) IN ('fb', 'facebook'),                                            'Facebook',
+                        lower(utm_source) IN ('tiktok', 'tt'),                                              'TikTok',
+                        lower(utm_source) IN ('google', 'adwords', 'gads', 'googleads', 'google_ads'),      'Google',
+                        lower(utm_source) IN ('snap', 'snapchat'),                                          'Snapchat',
+                        lower(utm_source) IN ('twitter', 'x'),                                              'X (Twitter)',
+                        lower(utm_source) IN ('yt', 'youtube'),                                             'YouTube',
+                        lower(utm_source) IN ('wa', 'whatsapp'),                                            'WhatsApp',
+                        lower(utm_source) IN ('tg', 'telegram'),                                            'Telegram',
+                        lower(utm_source) IN ('li', 'linkedin'),                                            'LinkedIn',
+                        utm_source
+                    ),
                 referrer    = '',                                                                                       '(direct)',
                 domain(referrer) IN ('mail.google.com', 'gmail.com', 'inbox.google.com'),                              'Gmail',
                 domain(referrer) IN ('outlook.live.com', 'outlook.office.com', 'outlook.com', 'mail.live.com'),        'Outlook',
@@ -60,10 +95,12 @@ trait ClassifiesTraffic
 
     protected function mediumClassificationSql(): string
     {
-        return <<<'SQL'
+        $cleanMedium = $this->isCleanUtmSql('utm_medium');
+        $cleanSource = $this->isCleanUtmSql('utm_source');
+        return <<<SQL
             multiIf(
-                utm_medium != '',                                                                                       utm_medium,
-                utm_source != '',                                                                                       'campaign',
+                {$cleanMedium},                                                                                          utm_medium,
+                {$cleanSource},                                                                                          'campaign',
                 referrer    = '',                                                                                       '(none)',
                 domain(referrer) IN (
                     'mail.google.com', 'gmail.com', 'inbox.google.com',

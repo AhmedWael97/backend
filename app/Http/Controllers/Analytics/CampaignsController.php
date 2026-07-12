@@ -90,7 +90,7 @@ class CampaignsController extends Controller
             SELECT
                 {$sourceSql} AS source,
                 {$mediumSql} AS medium,
-                if(utm_campaign = '', '(none)', utm_campaign) AS campaign,
+                {$this->cleanCampaignSql()} AS campaign,
                 uniq(session_id) AS sessions,
                 uniq(visitor_id) AS visitors,
                 round(avg(tot_duration)) AS avg_duration,
@@ -156,7 +156,7 @@ class CampaignsController extends Controller
                         touch_ts,
                         {$sourceSql} AS source,
                         {$mediumSql} AS medium,
-                        if(utm_campaign = '', '(none)', utm_campaign) AS campaign
+                        {$this->cleanCampaignSql()} AS campaign
                     FROM (
                         SELECT
                             session_id,
@@ -380,7 +380,31 @@ class CampaignsController extends Controller
     }
 
     /**
+     * True when a UTM value is real — not blank, not corrupted (contains the
+     * UTF-8 replacement char, U+FFFD — happens when an ad network's redirect
+     * chain mangles the query string), and not an ad platform's dynamic-tag
+     * placeholder that failed to interpolate (TikTok's "__CAMPAIGN_NAME__",
+     * Meta's "{{campaign.name}}"). Garbage/placeholder values fall through to
+     * referrer-based classification instead of polluting the campaigns list.
+     */
+    private function isCleanUtmSql(string $col): string
+    {
+        return "{$col} != '' AND position({$col}, unhex('EFBFBD')) = 0"
+            . " AND NOT startsWith({$col}, '__') AND NOT startsWith({$col}, '{')";
+    }
+
+    /** utm_campaign for display — '(not set)' for blank/corrupted/unexploded-macro values. */
+    private function cleanCampaignSql(): string
+    {
+        $clean = $this->isCleanUtmSql('utm_campaign');
+        return "if({$clean}, utm_campaign, '(not set)')";
+    }
+
+    /**
      * SQL fragment that turns (utm_source, referrer) into a friendly source name.
+     * A clean utm_source is aliased to a canonical platform name (ad platforms
+     * are inconsistent — "ig"/"instagram"/"Instagram" should be one row, not
+     * three) instead of used verbatim.
      *
      * Uses ClickHouse helpers:
      *   - domain(url):                       full host, e.g. "mail.google.com"
@@ -388,9 +412,23 @@ class CampaignsController extends Controller
      */
     private function sourceClassificationSql(): string
     {
-        return <<<'SQL'
+        $cleanSource = $this->isCleanUtmSql('utm_source');
+        return <<<SQL
             multiIf(
-                utm_source != '',                                                                                       utm_source,
+                {$cleanSource},
+                    multiIf(
+                        lower(utm_source) IN ('ig', 'instagram'),                                          'Instagram',
+                        lower(utm_source) IN ('fb', 'facebook'),                                            'Facebook',
+                        lower(utm_source) IN ('tiktok', 'tt'),                                              'TikTok',
+                        lower(utm_source) IN ('google', 'adwords', 'gads', 'googleads', 'google_ads'),      'Google',
+                        lower(utm_source) IN ('snap', 'snapchat'),                                          'Snapchat',
+                        lower(utm_source) IN ('twitter', 'x'),                                              'X (Twitter)',
+                        lower(utm_source) IN ('yt', 'youtube'),                                             'YouTube',
+                        lower(utm_source) IN ('wa', 'whatsapp'),                                            'WhatsApp',
+                        lower(utm_source) IN ('tg', 'telegram'),                                            'Telegram',
+                        lower(utm_source) IN ('li', 'linkedin'),                                            'LinkedIn',
+                        utm_source
+                    ),
                 referrer    = '',                                                                                       '(direct)',
 
                 -- ── Email clients (check full host before search engines, since mail.google.com → google.com) ──
@@ -451,10 +489,12 @@ class CampaignsController extends Controller
      */
     private function mediumClassificationSql(): string
     {
-        return <<<'SQL'
+        $cleanMedium = $this->isCleanUtmSql('utm_medium');
+        $cleanSource = $this->isCleanUtmSql('utm_source');
+        return <<<SQL
             multiIf(
-                utm_medium != '',                                                                                       utm_medium,
-                utm_source != '',                                                                                       'campaign',
+                {$cleanMedium},                                                                                          utm_medium,
+                {$cleanSource},                                                                                          'campaign',
                 referrer    = '',                                                                                       '(none)',
 
                 -- Email
