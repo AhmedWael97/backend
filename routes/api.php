@@ -553,6 +553,7 @@ Route::prefix('v1')->middleware('api.key')->group(function () {
             Route::post('forms/analyze', [\App\Http\Controllers\Analytics\FormsController::class, 'analyze'])->name('forms.analyze');
             Route::get('visitors', [VisitorController::class, 'index'])->name('visitors');
             Route::get('visitors/{visitorId}', [VisitorController::class, 'show'])->name('visitors.show');
+            Route::get('visitors/{visitorId}/sessions/{sessionId}/journey', [VisitorController::class, 'journey'])->name('visitors.journey');
             Route::get('campaigns', CampaignsController::class)->name('campaigns');
             Route::get('retention', RetentionController::class)->name('retention');
             Route::get('ltv', LtvController::class)->name('ltv');

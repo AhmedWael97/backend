@@ -86,6 +86,11 @@ class VisitorController extends Controller
 
     /**
      * GET /api/analytics/{domainId}/visitors/{visitorId}
+     * One row per session (entry/exit page, page count, duration already live
+     * on the `sessions` table) — was capped at 10, silently hiding sessions
+     * for anyone with more than that. Journey (what they actually did inside
+     * one session) is a separate lazy-loaded call — see journey() below —
+     * so this stays cheap regardless of how many sessions a visitor has.
      */
     public function show(Request $request, int $domainId, string $visitorId): JsonResponse
     {
@@ -102,26 +107,60 @@ class VisitorController extends Controller
              WHERE domain_id = {$domainId}
                AND visitor_id = :visitor_id
              ORDER BY started_at DESC
-             LIMIT 10",
-            ['visitor_id' => $visitorId]
-        );
-
-        $pageviews = $this->ch->select(
-            "SELECT url, title, toUnixTimestamp(ts) AS ts
-             FROM events
-             WHERE domain_id = {$domainId}
-               AND visitor_id = :visitor_id
-               AND type = 'pageview'
-             ORDER BY ts DESC
-             LIMIT 50",
+             LIMIT 200",
             ['visitor_id' => $visitorId]
         );
 
         return $this->success([
             'visitor_id' => $visitorId,
             'sessions' => $sessions,
-            'pageviews' => $pageviews,
+            'session_count' => count($sessions),
             'identified_as' => null,
+        ]);
+    }
+
+    /**
+     * GET /api/analytics/{domainId}/visitors/{visitorId}/sessions/{sessionId}/journey
+     * Every event in one session, in order — pageviews, clicks, scroll depth,
+     * rage/dead clicks, JS errors, custom events, everything the tracker
+     * recorded. `props` is returned as its raw JSON string; the frontend picks
+     * out the fields relevant to each event type (click target, scroll %, etc).
+     */
+    public function journey(Request $request, int $domainId, string $visitorId, string $sessionId): JsonResponse
+    {
+        $user = $request->user();
+        $domain = Domain::where('id', $domainId)
+            ->accessibleBy($user)
+            ->firstOrFail();
+
+        $did = (int) $domain->id;
+
+        $events = $this->ch->select(
+            "SELECT type, url, title, props, toUnixTimestamp(ts) AS ts
+             FROM events
+             WHERE domain_id = {$did}
+               AND visitor_id = :visitor_id
+               AND session_id = :session_id
+             ORDER BY ts ASC
+             LIMIT 300",
+            ['visitor_id' => $visitorId, 'session_id' => $sessionId]
+        );
+
+        $customEvents = $this->ch->select(
+            "SELECT name, props, toUnixTimestamp(ts) AS ts
+             FROM custom_events
+             WHERE domain_id = {$did}
+               AND visitor_id = :visitor_id
+               AND session_id = :session_id
+             ORDER BY ts ASC
+             LIMIT 100",
+            ['visitor_id' => $visitorId, 'session_id' => $sessionId]
+        );
+
+        return $this->success([
+            'session_id' => $sessionId,
+            'events' => $events,
+            'custom_events' => $customEvents,
         ]);
     }
 }
