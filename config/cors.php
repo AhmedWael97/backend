@@ -25,7 +25,9 @@ return [
         'https://www.eye-analsyis.live',
     ],
 
-    'allowed_origins_patterns' => [],
+    // The social-manager Chrome extension calls the API with a Bearer token
+    // (no cookies), so this only needs to let the browser's preflight through.
+    'allowed_origins_patterns' => ['#^chrome-extension://.*$#'],
 
     'allowed_headers' => ['*'],
 

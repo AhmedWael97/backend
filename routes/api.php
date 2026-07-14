@@ -31,6 +31,7 @@ use App\Http\Controllers\Analytics\LtvController;
 use App\Http\Controllers\Tools\SeoRankController;
 use App\Http\Controllers\Growth\LeadController;
 use App\Http\Controllers\Growth\OutreachController;
+use App\Http\Controllers\Social\SocialInboxController;
 use App\Http\Controllers\Analytics\EngagedVisitorsController;
 use App\Http\Controllers\Analytics\SummaryController;
 use App\Http\Controllers\BillingController;
@@ -305,6 +306,15 @@ Route::prefix('v1')->middleware('api.key')->group(function () {
         });
         Route::post('outreach/draft', [OutreachController::class, 'draft'])->name('outreach.draft');
         Route::post('outreach/send', [OutreachController::class, 'send'])->name('outreach.send');
+
+        // Social inbox — Chrome extension unified inbox (user's own logged-in
+        // sessions in their own browser; we never hold platform credentials).
+        Route::prefix('social')->name('social.')->middleware('subscribed')->group(function () {
+            Route::get('inbox', [SocialInboxController::class, 'index'])->name('inbox.index');
+            Route::post('inbox/sync', [SocialInboxController::class, 'sync'])->name('inbox.sync');
+            Route::post('inbox/{id}/draft', [SocialInboxController::class, 'draft'])->name('inbox.draft');
+            Route::post('inbox/{id}/status', [SocialInboxController::class, 'updateStatus'])->name('inbox.status');
+        });
 
         // Auth session
         Route::get('auth/me', [ProfileController::class, 'show'])->name('auth.me');
