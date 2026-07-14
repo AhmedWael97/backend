@@ -105,4 +105,24 @@ class SocialInboxController extends Controller
         $item->update(['status' => $data['status']]);
         return $this->success($item);
     }
+
+    /** Per-platform/status counts + a 14-day daily volume series, for the dashboard page. */
+    public function summary(Request $request): JsonResponse
+    {
+        $userId = $request->user()->id;
+
+        $byPlatform = SocialInboxItem::where('user_id', $userId)
+            ->selectRaw('platform, count(*) as total, sum(case when status = \'unread\' then 1 else 0 end) as unread, sum(case when status = \'replied\' then 1 else 0 end) as replied')
+            ->groupBy('platform')
+            ->get();
+
+        $daily = SocialInboxItem::where('user_id', $userId)
+            ->where('created_at', '>=', now()->subDays(14))
+            ->selectRaw('to_char(created_at, \'YYYY-MM-DD\') as day, platform, count(*) as total')
+            ->groupBy('day', 'platform')
+            ->orderBy('day')
+            ->get();
+
+        return $this->success(['by_platform' => $byPlatform, 'daily' => $daily]);
+    }
 }

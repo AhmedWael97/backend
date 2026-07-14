@@ -33,6 +33,7 @@ class User extends Authenticatable implements MustVerifyEmail
         'ai_tokens',
         'ai_free_used',
         'referral_code',
+        'openai_api_key',
     ];
 
     protected $hidden = [
@@ -40,6 +41,7 @@ class User extends Authenticatable implements MustVerifyEmail
         'remember_token',
         'totp_secret',
         'api_key',
+        'openai_api_key',
     ];
 
     protected function casts(): array
@@ -52,6 +54,7 @@ class User extends Authenticatable implements MustVerifyEmail
             'ai_free_used' => 'boolean',
             'ai_tokens' => 'integer',
             'onboarding' => 'array',
+            'openai_api_key' => 'encrypted',
         ];
     }
 

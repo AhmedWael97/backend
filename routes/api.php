@@ -32,6 +32,8 @@ use App\Http\Controllers\Tools\SeoRankController;
 use App\Http\Controllers\Growth\LeadController;
 use App\Http\Controllers\Growth\OutreachController;
 use App\Http\Controllers\Social\SocialInboxController;
+use App\Http\Controllers\Social\SocialSettingsController;
+use App\Http\Controllers\Social\ScheduledPostController;
 use App\Http\Controllers\Analytics\EngagedVisitorsController;
 use App\Http\Controllers\Analytics\SummaryController;
 use App\Http\Controllers\BillingController;
@@ -311,9 +313,24 @@ Route::prefix('v1')->middleware('api.key')->group(function () {
         // sessions in their own browser; we never hold platform credentials).
         Route::prefix('social')->name('social.')->middleware('subscribed')->group(function () {
             Route::get('inbox', [SocialInboxController::class, 'index'])->name('inbox.index');
+            Route::get('inbox/summary', [SocialInboxController::class, 'summary'])->name('inbox.summary');
             Route::post('inbox/sync', [SocialInboxController::class, 'sync'])->name('inbox.sync');
             Route::post('inbox/{id}/draft', [SocialInboxController::class, 'draft'])->name('inbox.draft');
             Route::post('inbox/{id}/status', [SocialInboxController::class, 'updateStatus'])->name('inbox.status');
+
+            Route::get('settings', [SocialSettingsController::class, 'show'])->name('settings.show');
+            Route::post('settings', [SocialSettingsController::class, 'update'])->name('settings.update');
+        });
+
+        Route::prefix('scheduled-posts')->name('scheduled-posts.')->middleware('subscribed')->group(function () {
+            Route::get('/', [ScheduledPostController::class, 'index'])->name('index');
+            Route::get('due', [ScheduledPostController::class, 'due'])->name('due');
+            Route::post('generate-text', [ScheduledPostController::class, 'generateText'])->name('generate-text');
+            Route::post('generate-image', [ScheduledPostController::class, 'generateImage'])->name('generate-image');
+            Route::post('/', [ScheduledPostController::class, 'store'])->name('store');
+            Route::put('{id}', [ScheduledPostController::class, 'update'])->name('update');
+            Route::post('{id}/status', [ScheduledPostController::class, 'updateStatus'])->name('status');
+            Route::delete('{id}', [ScheduledPostController::class, 'destroy'])->name('destroy');
         });
 
         // Auth session
