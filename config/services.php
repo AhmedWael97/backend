@@ -62,6 +62,13 @@ return [
         'token' => env('IPINFO_TOKEN'),
     ],
 
+    // Self-hosted GPU box (docker/comfyui/) for EYE's own social-post image
+    // (SDXL-Turbo) and short video (SVD) generation. Not a per-user key —
+    // one box we own, used for our own marketing content.
+    'comfyui' => [
+        'host' => env('COMFYUI_HOST'),
+    ],
+
     // Failover order for AiTextService. Providers without a key are skipped.
     'ai' => [
         'order' => env('AI_PROVIDER_ORDER', 'anthropic,gemini,openai'),

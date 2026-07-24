@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Social;
 use App\Http\Controllers\Controller;
 use App\Models\ScheduledPost;
 use App\Services\AnthropicService;
+use App\Services\ComfyUiService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
@@ -64,11 +65,21 @@ class ScheduledPostController extends Controller
         return $this->success(['content' => $content]);
     }
 
-    public function generateImage(Request $request): JsonResponse
+    public function generateImage(Request $request, ComfyUiService $comfy): JsonResponse
     {
         $data = $request->validate(['prompt' => ['required', 'string', 'max:2000']]);
-
         $user = $request->user();
+
+        if ($comfy->isConfigured()) {
+            try {
+                $bytes = $comfy->generateImage($data['prompt']);
+            } catch (\Throwable $e) {
+                report($e);
+                return $this->error('Image generation failed on the GPU box — check it is running.', 502);
+            }
+            return $this->success(['image_url' => $this->storeGenerated($user->id, $bytes, 'png')]);
+        }
+
         $key = $user->openai_api_key;
         if (!$key) {
             return $this->error('Add your OpenAI API key in Social Settings first.', 422);
@@ -94,10 +105,39 @@ class ScheduledPostController extends Controller
             return $this->error('Image generation returned no image.', 502);
         }
 
-        $filename = 'social-posts/' . $user->id . '/' . Str::random(24) . '.png';
-        Storage::disk('public')->put($filename, base64_decode($b64));
+        return $this->success(['image_url' => $this->storeGenerated($user->id, base64_decode($b64), 'png')]);
+    }
 
-        return $this->success(['image_url' => Storage::disk('public')->url($filename)]);
+    /** Animates an already-generated post image into a short clip (needs the ComfyUI GPU box). */
+    public function generateVideo(Request $request, ComfyUiService $comfy): JsonResponse
+    {
+        $data = $request->validate(['image_url' => ['required', 'string']]);
+        $user = $request->user();
+
+        if (!$comfy->isConfigured()) {
+            return $this->error('Video generation needs the ComfyUI GPU box (COMFYUI_HOST) configured.', 422);
+        }
+
+        $imageResponse = Http::timeout(30)->get($data['image_url']);
+        if ($imageResponse->failed()) {
+            return $this->error('Could not fetch the source image.', 422);
+        }
+
+        try {
+            $mp4Bytes = $comfy->generateVideo($imageResponse->body());
+        } catch (\Throwable $e) {
+            report($e);
+            return $this->error('Video generation failed on the GPU box — check it is running.', 502);
+        }
+
+        return $this->success(['video_url' => $this->storeGenerated($user->id, $mp4Bytes, 'mp4')]);
+    }
+
+    private function storeGenerated(int $userId, string $bytes, string $extension): string
+    {
+        $filename = 'social-posts/' . $userId . '/' . Str::random(24) . '.' . $extension;
+        Storage::disk('public')->put($filename, $bytes);
+        return Storage::disk('public')->url($filename);
     }
 
     public function store(Request $request): JsonResponse
@@ -108,6 +148,7 @@ class ScheduledPostController extends Controller
             'prompt' => ['nullable', 'string', 'max:2000'],
             'content' => ['required', 'string', 'max:5000'],
             'image_url' => ['nullable', 'string', 'max:2048'],
+            'video_url' => ['nullable', 'string', 'max:2048'],
             'scheduled_at' => ['required', 'date'],
         ]);
         $data['user_id'] = $request->user()->id;
@@ -122,6 +163,7 @@ class ScheduledPostController extends Controller
         $data = $request->validate([
             'content' => ['sometimes', 'string', 'max:5000'],
             'image_url' => ['sometimes', 'nullable', 'string', 'max:2048'],
+            'video_url' => ['sometimes', 'nullable', 'string', 'max:2048'],
             'scheduled_at' => ['sometimes', 'date'],
             'status' => ['sometimes', 'in:queued,filled,posted,cancelled'],
         ]);

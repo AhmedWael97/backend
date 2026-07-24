@@ -327,6 +327,7 @@ Route::prefix('v1')->middleware('api.key')->group(function () {
             Route::get('due', [ScheduledPostController::class, 'due'])->name('due');
             Route::post('generate-text', [ScheduledPostController::class, 'generateText'])->name('generate-text');
             Route::post('generate-image', [ScheduledPostController::class, 'generateImage'])->name('generate-image');
+            Route::post('generate-video', [ScheduledPostController::class, 'generateVideo'])->name('generate-video');
             Route::post('/', [ScheduledPostController::class, 'store'])->name('store');
             Route::put('{id}', [ScheduledPostController::class, 'update'])->name('update');
             Route::post('{id}/status', [ScheduledPostController::class, 'updateStatus'])->name('status');
