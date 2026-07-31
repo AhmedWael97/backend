@@ -9,6 +9,7 @@ use App\Http\Controllers\Auth\RegisterController;
 use App\Http\Controllers\Auth\TwoFactorController;
 use App\Http\Controllers\Analytics\CompanyController;
 use App\Http\Controllers\Payment\PaymobController;
+use App\Http\Controllers\Payment\PaddleController;
 use App\Http\Controllers\Analytics\CustomEventsController;
 use App\Http\Controllers\Analytics\CustomEventsStoreController;
 use App\Http\Controllers\Analytics\DevicesController;
@@ -151,6 +152,12 @@ Route::prefix('v1')->middleware('api.key')->group(function () {
     // Paymob webhook — public endpoint (Paymob server-to-server, HMAC-verified)
     Route::post('billing/paymob/webhook', [PaymobController::class, 'webhook'])
         ->name('billing.paymob.webhook')
+        ->withoutMiddleware('api.key')
+        ->middleware('throttle:60,1');
+
+    // Paddle webhook — public endpoint (Paddle server-to-server, signature-verified)
+    Route::post('billing/paddle/webhook', [PaddleController::class, 'webhook'])
+        ->name('billing.paddle.webhook')
         ->withoutMiddleware('api.key')
         ->middleware('throttle:60,1');
 
@@ -431,6 +438,10 @@ Route::prefix('v1')->middleware('api.key')->group(function () {
             // Paymob — initiate payment (returns hosted iframe URL)
             Route::post('paymob/initiate', [PaymobController::class, 'initiate'])
                 ->name('billing.paymob.initiate')
+                ->middleware('throttle:10,1');
+            // Paddle — initiate checkout (returns client token + price ID for Paddle.js)
+            Route::post('paddle/initiate', [PaddleController::class, 'initiate'])
+                ->name('billing.paddle.initiate')
                 ->middleware('throttle:10,1');
             Route::post('promo/validate', [\App\Http\Controllers\Payment\PromoCodeController::class, 'validateCode'])
                 ->name('promo.validate')
@@ -753,6 +764,7 @@ Route::prefix('v1')->middleware('api.key')->group(function () {
             Route::get('/', [AdminPaymentMethodController::class, 'index'])->name('index');
             Route::post('/', [AdminPaymentMethodController::class, 'store'])->name('store');
             Route::post('paymob/test', [PaymobController::class, 'test'])->name('paymob.test');
+            Route::post('paddle/test', [PaddleController::class, 'test'])->name('paddle.test');
             Route::put('{id}', [AdminPaymentMethodController::class, 'update'])->name('update');
             Route::delete('{id}', [AdminPaymentMethodController::class, 'destroy'])->name('destroy');
         });

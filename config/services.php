@@ -99,6 +99,17 @@ return [
         'base_url' => env('PAYMOB_BASE_URL', 'https://accept.paymob.com/api'),
     ],
 
+    // Paddle (merchant of record — handles global tax/VAT). Per-mode keys are
+    // normally managed in the super-admin Payment Methods page (like Paymob);
+    // these env vars are just the fallback. See PaddleController::resolvePaddleConfig().
+    'paddle' => [
+        'client_token' => env('PADDLE_CLIENT_TOKEN'),
+        'api_key' => env('PADDLE_API_KEY'),
+        'webhook_secret' => env('PADDLE_WEBHOOK_SECRET'),
+        // 'sandbox' or 'production' — must match which client_token/api_key pair is set.
+        'environment' => env('PADDLE_ENVIRONMENT', 'sandbox'),
+    ],
+
     'currency' => [
         // Base plan prices are stored in USD. Egyptian visitors are shown — and
         // (via Paymob, which only accepts EGP) charged — in EGP at this rate.
