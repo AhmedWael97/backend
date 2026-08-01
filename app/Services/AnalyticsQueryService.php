@@ -30,7 +30,7 @@ class AnalyticsQueryService
         $summaryRows = $this->clickhouse->select("
             SELECT
                 sum(pv_count)                     AS pageviews,
-                uniq(visitor_id)                  AS unique_visitors,
+                uniqExact(visitor_id)              AS unique_visitors,
                 count()                           AS sessions,
                 avg(session_duration)             AS avg_duration
             FROM (
@@ -87,7 +87,7 @@ class AnalyticsQueryService
             SELECT
                 {$dateExpr} AS period,
                 countIf(type = 'pageview') AS pageviews,
-                uniq(visitor_id)            AS unique_visitors,
+                uniqExact(visitor_id)       AS unique_visitors,
                 uniq(session_id)            AS sessions
             FROM events
             WHERE domain_id = {$domainId}
