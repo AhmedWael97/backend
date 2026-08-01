@@ -21,7 +21,7 @@ class PublicStatsController extends Controller
             $events = 0;
             $visitors = 0;
             try {
-                $rows = $clickhouse->select('SELECT count() AS c, uniq(visitor_id) AS v FROM events');
+                $rows = $clickhouse->select('SELECT count() AS c, uniqExact(visitor_id) AS v FROM events');
                 $events = (int) ($rows[0]['c'] ?? 0);
                 $visitors = (int) ($rows[0]['v'] ?? 0);
             } catch (\Throwable $e) {

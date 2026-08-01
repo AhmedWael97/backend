@@ -690,7 +690,7 @@ class InsightEngine
         $visitors = [];
         $converters = [];
         try {
-            foreach ($this->ch->select("SELECT variant, uniq(visitor_id) AS v FROM ({$expCte}) GROUP BY variant") as $r) {
+            foreach ($this->ch->select("SELECT variant, uniqExact(visitor_id) AS v FROM ({$expCte}) GROUP BY variant") as $r) {
                 $visitors[(string) $r['variant']] = (int) $r['v'];
             }
             foreach ($this->ch->select("
@@ -921,7 +921,7 @@ class InsightEngine
         // Exclude today: it is a partial day and would fake a crash in the trend
         // and a low-traffic anomaly every single morning.
         return $this->ch->select("
-            SELECT toDate(ts) AS d, uniq(visitor_id) AS visitors, uniq(session_id) AS sessions
+            SELECT toDate(ts) AS d, uniqExact(visitor_id) AS visitors, uniq(session_id) AS sessions
             FROM events
             WHERE domain_id = {$domainId} AND type = 'pageview'
               AND ts >= today() - {$days} AND ts < today()

@@ -124,7 +124,7 @@ class AnalyticsQueryService
             SELECT
                 url,
                 count()              AS pageviews,
-                uniq(visitor_id)     AS unique_visitors,
+                uniqExact(visitor_id)     AS unique_visitors,
                 avgIf(duration, duration > 0) AS avg_duration
             FROM events
             WHERE domain_id = {$domainId}
@@ -158,7 +158,7 @@ class AnalyticsQueryService
             SELECT
                 referrer,
                 count()          AS visits,
-                uniq(visitor_id) AS unique_visitors
+                uniqExact(visitor_id) AS unique_visitors
             FROM events
             WHERE domain_id = {$domainId}
               AND type = 'pageview'
@@ -195,19 +195,19 @@ class AnalyticsQueryService
         ";
 
         $browsers = $this->clickhouse->select("
-            SELECT browser, count() AS visits, uniq(visitor_id) AS unique_visitors
+            SELECT browser, count() AS visits, uniqExact(visitor_id) AS unique_visitors
             {$base}
             GROUP BY browser ORDER BY visits DESC
         ");
 
         $os = $this->clickhouse->select("
-            SELECT os, count() AS visits, uniq(visitor_id) AS unique_visitors
+            SELECT os, count() AS visits, uniqExact(visitor_id) AS unique_visitors
             {$base}
             GROUP BY os ORDER BY visits DESC
         ");
 
         $devices = $this->clickhouse->select("
-            SELECT device_type, count() AS visits, uniq(visitor_id) AS unique_visitors
+            SELECT device_type, count() AS visits, uniqExact(visitor_id) AS unique_visitors
             {$base}
             GROUP BY device_type ORDER BY visits DESC
         ");
@@ -240,7 +240,7 @@ class AnalyticsQueryService
             SELECT
                 if(country = '', 'Unknown', country) AS country,
                 count() AS pageviews,
-                uniq(visitor_id) AS unique_visitors
+                uniqExact(visitor_id) AS unique_visitors
             {$base}
             GROUP BY country ORDER BY pageviews DESC LIMIT 50
         ");
@@ -250,7 +250,7 @@ class AnalyticsQueryService
                 if(region = '', 'Unknown', region) AS region,
                 if(country = '', 'Unknown', country) AS country,
                 count() AS pageviews,
-                uniq(visitor_id) AS unique_visitors
+                uniqExact(visitor_id) AS unique_visitors
             {$base}
             GROUP BY region, country ORDER BY pageviews DESC LIMIT 50
         ");
@@ -275,7 +275,7 @@ class AnalyticsQueryService
             SELECT
                 name,
                 count()          AS occurrences,
-                uniq(visitor_id) AS unique_visitors
+                uniqExact(visitor_id) AS unique_visitors
             FROM custom_events
             WHERE domain_id = {$domainId}
               AND ts >= '{$startStr}'
@@ -321,7 +321,7 @@ class AnalyticsQueryService
             return [];
         }
         $selectStepOrder = $hasStepOrder ? 'step_order' : 'toUInt32(0) AS step_order';
-        $visitorExpr = $hasVisitorId ? 'uniq(visitor_id)' : 'uniq(session_id)';
+        $visitorExpr = $hasVisitorId ? 'uniqExact(visitor_id)' : 'uniq(session_id)';
         $groupBy = $hasStepOrder ? 'step_order, step_id' : 'step_id';
         $orderBy = $hasStepOrder ? 'step_order ASC' : 'sessions DESC';
 

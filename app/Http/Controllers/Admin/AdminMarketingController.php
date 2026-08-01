@@ -44,7 +44,7 @@ class AdminMarketingController extends Controller
         $rows = [];
         try {
             $rows = $this->clickhouse->select("
-                SELECT name, count() AS c, uniq(visitor_id) AS v
+                SELECT name, count() AS c, uniqExact(visitor_id) AS v
                 FROM custom_events
                 WHERE name IN ({$inList}) AND ts >= now() - INTERVAL 30 DAY
                 GROUP BY name

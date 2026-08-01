@@ -53,7 +53,7 @@ class AnalyzeDomainJob implements ShouldQueue
         $summary30 = $clickhouse->select("
             SELECT
                 countIf(type = 'pageview')       AS pageviews,
-                uniq(visitor_id)                 AS unique_visitors,
+                uniqExact(visitor_id)                 AS unique_visitors,
                 uniq(session_id)                 AS sessions,
                 avgIf(duration, duration > 0)    AS avg_duration,
                 countIf(pv_count = 1) / greatest(count(), 1) * 100 AS bounce_rate
@@ -68,7 +68,7 @@ class AnalyzeDomainJob implements ShouldQueue
         $summary7 = $clickhouse->select("
             SELECT
                 countIf(type = 'pageview')       AS pageviews,
-                uniq(visitor_id)                 AS unique_visitors,
+                uniqExact(visitor_id)                 AS unique_visitors,
                 uniq(session_id)                 AS sessions
             FROM events
             WHERE domain_id = {$domainId} AND ts >= '{$from7}' AND ts < '{$to}'
@@ -77,7 +77,7 @@ class AnalyzeDomainJob implements ShouldQueue
         $summary7prev = $clickhouse->select("
             SELECT
                 countIf(type = 'pageview')   AS pageviews,
-                uniq(visitor_id)             AS unique_visitors
+                uniqExact(visitor_id)             AS unique_visitors
             FROM events
             WHERE domain_id = {$domainId} AND ts >= '{$from14}' AND ts < '{$from7}'
         ");
@@ -87,7 +87,7 @@ class AnalyzeDomainJob implements ShouldQueue
             SELECT
                 url,
                 count()                          AS pageviews,
-                uniq(visitor_id)                 AS unique_visitors,
+                uniqExact(visitor_id)                 AS unique_visitors,
                 avgIf(duration, duration > 0)    AS avg_time_on_page
             FROM events
             WHERE domain_id = {$domainId} AND type = 'pageview'
@@ -100,7 +100,7 @@ class AnalyzeDomainJob implements ShouldQueue
             SELECT
                 if(referrer = '', 'Direct / None', referrer) AS source,
                 count() AS visits,
-                uniq(visitor_id) AS unique_visitors
+                uniqExact(visitor_id) AS unique_visitors
             FROM events
             WHERE domain_id = {$domainId} AND type = 'pageview'
               AND ts >= '{$from30}' AND ts < '{$to}'
@@ -112,7 +112,7 @@ class AnalyzeDomainJob implements ShouldQueue
             SELECT
                 if(country = '', 'Unknown', country) AS country,
                 count() AS pageviews,
-                uniq(visitor_id) AS unique_visitors
+                uniqExact(visitor_id) AS unique_visitors
             FROM events
             WHERE domain_id = {$domainId} AND ts >= '{$from30}' AND ts < '{$to}'
             GROUP BY country ORDER BY pageviews DESC LIMIT 10
@@ -155,7 +155,7 @@ class AnalyzeDomainJob implements ShouldQueue
 
         // ── 8. Custom events (conversion signals) ────────────────────────────
         $customEvents = $clickhouse->select("
-            SELECT name, count() AS occurrences, uniq(visitor_id) AS unique_visitors
+            SELECT name, count() AS occurrences, uniqExact(visitor_id) AS unique_visitors
             FROM custom_events
             WHERE domain_id = {$domainId}
               AND ts >= '{$from30}' AND ts < '{$to}'
@@ -169,7 +169,7 @@ class AnalyzeDomainJob implements ShouldQueue
                 if(utm_medium = '', '(none)', utm_medium)     AS medium,
                 if(utm_campaign = '', '(none)', utm_campaign) AS campaign,
                 uniq(session_id) AS sessions,
-                uniq(visitor_id) AS visitors
+                uniqExact(visitor_id) AS visitors
             FROM events
             WHERE domain_id = {$domainId} AND type = 'pageview'
               AND ts >= '{$from30}' AND ts < '{$to}'
@@ -192,13 +192,13 @@ class AnalyzeDomainJob implements ShouldQueue
 
         // ── 11. Conversion signals: sign-ups (identify) + purchase events ────
         $signupRows = $clickhouse->select("
-            SELECT count() AS identifies, uniq(visitor_id) AS identified_visitors
+            SELECT count() AS identifies, uniqExact(visitor_id) AS identified_visitors
             FROM events
             WHERE domain_id = {$domainId} AND type = 'identify'
               AND ts >= '{$from30}' AND ts < '{$to}'
         ");
         $purchaseRows = $clickhouse->select("
-            SELECT count() AS purchase_events, uniq(visitor_id) AS buyers
+            SELECT count() AS purchase_events, uniqExact(visitor_id) AS buyers
             FROM custom_events
             WHERE domain_id = {$domainId}
               AND name IN ('purchase','order_completed','checkout_complete')

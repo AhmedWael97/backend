@@ -50,7 +50,7 @@ class UxIssuesController extends Controller
                 element_selector,
                 details,
                 count() AS occurrences,
-                uniq(visitor_id) AS affected_visitors,
+                uniqExact(visitor_id) AS affected_visitors,
                 max(created_at)  AS last_seen,
                 any(session_id)  AS sample_session_id
             FROM ux_events

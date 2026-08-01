@@ -90,7 +90,7 @@ class AiController extends Controller
         $from = now()->subDays(30)->format('Y-m-d H:i:s');
         $to = now()->format('Y-m-d H:i:s');
         $rows = $this->clickhouse->select("
-            SELECT uniq(visitor_id) AS unique_visitors
+            SELECT uniqExact(visitor_id) AS unique_visitors
             FROM events
             WHERE domain_id = {$domain->id}
               AND ts >= '{$from}' AND ts < '{$to}'
@@ -122,7 +122,7 @@ class AiController extends Controller
         $from = now()->subDays(30)->format('Y-m-d H:i:s');
         $to = now()->format('Y-m-d H:i:s');
         $rows = $this->clickhouse->select("
-            SELECT uniq(visitor_id) AS unique_visitors
+            SELECT uniqExact(visitor_id) AS unique_visitors
             FROM events
             WHERE domain_id = {$domain->id}
               AND ts >= '{$from}' AND ts < '{$to}'

@@ -202,7 +202,7 @@ class ChatbotController extends Controller
         $summary = $this->ch->select("
             SELECT
                 countIf(type = 'pageview')   AS pageviews,
-                uniq(visitor_id)              AS unique_visitors,
+                uniqExact(visitor_id)              AS unique_visitors,
                 uniq(session_id)              AS sessions,
                 round(avgIf(duration, duration > 0)) AS avg_duration
             FROM events
@@ -236,7 +236,7 @@ class ChatbotController extends Controller
 
         // Top 5 countries
         $topCountries = $this->ch->select("
-            SELECT country, uniq(visitor_id) AS visitors
+            SELECT country, uniqExact(visitor_id) AS visitors
             FROM events
             WHERE domain_id={$domainId} AND country != ''
               AND ts>='{$start}' AND ts<'{$end}'
@@ -255,7 +255,7 @@ class ChatbotController extends Controller
 
         // Device split
         $devices = $this->ch->select("
-            SELECT device_type, uniq(visitor_id) AS visitors
+            SELECT device_type, uniqExact(visitor_id) AS visitors
             FROM events
             WHERE domain_id={$domainId} AND device_type != ''
               AND ts>='{$start}' AND ts<'{$end}'
@@ -266,7 +266,7 @@ class ChatbotController extends Controller
         $prevStart = $now->copy()->subDays(60)->format('Y-m-d H:i:s');
         $prevEnd = $now->copy()->subDays(30)->format('Y-m-d H:i:s');
         $prevSummary = $this->ch->select("
-            SELECT uniq(visitor_id) AS unique_visitors, countIf(type='pageview') AS pageviews
+            SELECT uniqExact(visitor_id) AS unique_visitors, countIf(type='pageview') AS pageviews
             FROM events
             WHERE domain_id={$domainId}
               AND ts>='{$prevStart}' AND ts<'{$prevEnd}'

@@ -41,7 +41,7 @@ class SendWeeklyDigestJob implements ShouldQueue
 
         $stats = $clickhouse->select("
             SELECT
-                uniq(visitor_id) AS visitors,
+                uniqExact(visitor_id) AS visitors,
                 count()          AS sessions,
                 any(country)     AS top_country
             FROM sessions

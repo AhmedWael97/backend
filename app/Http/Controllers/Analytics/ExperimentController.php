@@ -301,7 +301,7 @@ class ExperimentController extends Controller
         $visitorsByVariant = [];
         $convByVariant = [];
         try {
-            foreach ($this->ch->select("SELECT variant, uniq(visitor_id) AS visitors FROM ({$expCte}) GROUP BY variant") as $r) {
+            foreach ($this->ch->select("SELECT variant, uniqExact(visitor_id) AS visitors FROM ({$expCte}) GROUP BY variant") as $r) {
                 $visitorsByVariant[(string) $r['variant']] = (int) $r['visitors'];
             }
             foreach ($this->ch->select("

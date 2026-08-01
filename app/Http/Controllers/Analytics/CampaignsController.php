@@ -92,7 +92,7 @@ class CampaignsController extends Controller
                 {$mediumSql} AS medium,
                 {$this->cleanCampaignSql()} AS campaign,
                 uniq(session_id) AS sessions,
-                uniq(visitor_id) AS visitors,
+                uniqExact(visitor_id) AS visitors,
                 round(avg(tot_duration)) AS avg_duration,
                 round(avg(pv_count), 1)  AS avg_pages,
                 round(toFloat64(countIf(pv_count = 1)) / nullIf(uniq(session_id), 0) * 100, 1) AS bounce_rate,
@@ -319,7 +319,7 @@ class CampaignsController extends Controller
                 {$sourceSql} AS source,
                 {$mediumSql} AS medium,
                 uniq(session_id) AS sessions,
-                uniq(visitor_id) AS visitors
+                uniqExact(visitor_id) AS visitors
             FROM ({$sessionsCte})
             GROUP BY source, medium
             ORDER BY sessions DESC

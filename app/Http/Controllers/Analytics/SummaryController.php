@@ -78,7 +78,7 @@ class SummaryController extends Controller
 
         $traffic = $this->ch->select("
             SELECT
-                uniq(visitor_id)                                    AS visitors,
+                uniqExact(visitor_id)                                    AS visitors,
                 count()                                             AS sessions,
                 sum(pv_count)                                       AS pageviews,
                 round(avgIf(dur, dur > 0))                          AS avg_duration,
@@ -90,7 +90,7 @@ class SummaryController extends Controller
 
         $prevTraffic = $this->ch->select("
             SELECT
-                uniq(visitor_id)                                    AS visitors,
+                uniqExact(visitor_id)                                    AS visitors,
                 count()                                             AS sessions,
                 sum(pv_count)                                       AS pageviews,
                 round(avgIf(dur, dur > 0))                          AS avg_duration,
@@ -143,7 +143,7 @@ class SummaryController extends Controller
                 if(us = '', '(direct)', us)   AS source,
                 if(uc = '', '(none)', uc)      AS campaign,
                 count()                        AS sessions,
-                uniq(visitor_id)               AS visitors,
+                uniqExact(visitor_id)               AS visitors,
                 round(avgIf(dur, dur > 0))     AS avg_duration
             FROM (
                 SELECT
@@ -204,7 +204,7 @@ class SummaryController extends Controller
         // ── Daily trend (chart) ───────────────────────────────────────────────
         $trend = $this->ch->select("
             SELECT toDate(ts)         AS date,
-                   uniq(visitor_id)   AS visitors,
+                   uniqExact(visitor_id)   AS visitors,
                    uniq(session_id)   AS sessions
             FROM events
             WHERE domain_id = {$did} AND type = 'pageview'
@@ -237,7 +237,7 @@ class SummaryController extends Controller
         // ── UX issues snapshot (rage/dead clicks, JS errors) — ux_events uses
         // `created_at`, not `ts`, unlike every other ClickHouse table here. ────
         $uxIssues = $this->ch->select("
-            SELECT type, count() AS occurrences, uniq(visitor_id) AS affected
+            SELECT type, count() AS occurrences, uniqExact(visitor_id) AS affected
             FROM ux_events
             WHERE domain_id = {$did} AND type IN ('rage_click', 'dead_click', 'js_error')
               AND created_at BETWEEN '{$startDt}' AND '{$endDt}'

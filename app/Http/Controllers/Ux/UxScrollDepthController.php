@@ -31,7 +31,7 @@ class UxScrollDepthController extends Controller
                 replaceRegexpOne(url, '^(https?://)www\\.', '\\\\1') AS url,
                 JSONExtractInt(details, 'depth') AS depth,
                 count()              AS hits,
-                uniq(visitor_id)     AS visitors
+                uniqExact(visitor_id)     AS visitors
             FROM ux_events
             WHERE domain_id = {$domain->id}
               AND type = 'scroll_depth'

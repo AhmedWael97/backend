@@ -255,7 +255,7 @@ class GenerateSitemapJob implements ShouldQueue
         $pageviews = $ch->select("
             SELECT url,
                    count()         AS pageviews,
-                   uniq(visitor_id) AS unique_visitors
+                   uniqExact(visitor_id) AS unique_visitors
             FROM events
             WHERE domain_id = {$domainId}
               AND type = 'pageview'

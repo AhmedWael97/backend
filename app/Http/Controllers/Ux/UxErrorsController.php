@@ -31,7 +31,7 @@ class UxErrorsController extends Controller
                                 JSONExtractInt(details, 'ln')     AS line,
                                 any(JSONExtractString(details, 'stk')) AS stack,
                                 count()                               AS occurrences,
-                                uniq(visitor_id)                      AS affected_visitors,
+                                uniqExact(visitor_id)                      AS affected_visitors,
                                 max(created_at)                       AS last_seen
                         FROM ux_events
                         WHERE domain_id = {$domain->id}

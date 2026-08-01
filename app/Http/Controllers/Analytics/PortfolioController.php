@@ -214,7 +214,7 @@ class PortfolioController extends Controller
                 SELECT
                     domain_id,
                     uniq(session_id) AS sessions,
-                    uniq(visitor_id) AS visitors,
+                    uniqExact(visitor_id) AS visitors,
                     sum(errors)      AS errors,
                     countIf(pv = 1)  AS bounced
                 FROM (

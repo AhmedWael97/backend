@@ -43,7 +43,7 @@ class CompanyController extends Controller
             SELECT
                 company_name,
                 any(country)              AS country,
-                uniq(visitor_id)          AS visitors,
+                uniqExact(visitor_id)          AS visitors,
                 count()                   AS sessions,
                 toString(max(started_at)) AS last_seen
             FROM sessions

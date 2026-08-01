@@ -49,7 +49,7 @@ class SendTrialEndingRemindersCommand extends Command
             if ($domainIds !== '') {
                 try {
                     $visitors = (int) ($clickhouse->select(
-                        "SELECT uniq(visitor_id) AS c FROM events WHERE domain_id IN ({$domainIds})"
+                        "SELECT uniqExact(visitor_id) AS c FROM events WHERE domain_id IN ({$domainIds})"
                     )[0]['c'] ?? 0);
                 } catch (\Throwable $e) {
                     report($e);

@@ -30,7 +30,7 @@ trait SendsDigest
         $to = now()->format('Y-m-d H:i:s');
 
         $stats = $clickhouse->select("
-            SELECT uniq(visitor_id) AS visitors, count() AS sessions, any(country) AS top_country
+            SELECT uniqExact(visitor_id) AS visitors, count() AS sessions, any(country) AS top_country
             FROM sessions WHERE domain_id IN ({$domainIds}) AND started_at >= '{$from}' AND started_at < '{$to}'
         ")[0] ?? [];
 
