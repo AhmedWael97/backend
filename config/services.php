@@ -90,6 +90,12 @@ return [
         'redirect' => env('GOOGLE_REDIRECT_URI', env('APP_URL') . '/api/v1/auth/google/callback'),
     ],
 
+    'facebook' => [
+        'client_id' => env('FACEBOOK_CLIENT_ID'),
+        'client_secret' => env('FACEBOOK_CLIENT_SECRET'),
+        'redirect' => env('FACEBOOK_REDIRECT_URI', env('APP_URL') . '/api/v1/auth/facebook/callback'),
+    ],
+
     'paymob' => [
         'api_key' => env('PAYMOB_API_KEY'),
         'integration_id' => env('PAYMOB_INTEGRATION_ID'),

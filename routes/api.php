@@ -246,6 +246,18 @@ Route::prefix('v1')->middleware('api.key')->group(function () {
         Route::post('google/one-tap', [\App\Http\Controllers\Auth\GoogleController::class, 'oneTap'])
             ->name('google.one-tap')
             ->middleware('throttle:20,1');
+        Route::get('facebook/redirect', [\App\Http\Controllers\Auth\FacebookController::class, 'redirect'])
+            ->name('facebook.redirect')
+            ->withoutMiddleware('api.key');
+        Route::get('facebook/callback', [\App\Http\Controllers\Auth\FacebookController::class, 'callback'])
+            ->name('facebook.callback')
+            ->withoutMiddleware('api.key');
+        Route::post('facebook/deauthorize', [\App\Http\Controllers\Auth\FacebookController::class, 'deauthorize'])
+            ->name('facebook.deauthorize')
+            ->withoutMiddleware('api.key');
+        Route::post('facebook/data-deletion', [\App\Http\Controllers\Auth\FacebookController::class, 'dataDeletion'])
+            ->name('facebook.data-deletion')
+            ->withoutMiddleware('api.key');
 
         // 2FA challenge (pre-auth — no sanctum guard yet)
         Route::post('two-factor/verify', [TwoFactorController::class, 'verifyChallenge'])
