@@ -608,6 +608,7 @@ Route::prefix('v1')->middleware('api.key')->group(function () {
             Route::get('campaigns', CampaignsController::class)->name('campaigns');
             Route::get('retention', RetentionController::class)->name('retention');
             Route::get('ltv', LtvController::class)->name('ltv');
+            Route::get('traffic-quality', \App\Http\Controllers\Analytics\TrafficQualityController::class)->name('traffic-quality');
             Route::get('seo-rank', [SeoRankController::class, 'index'])->name('seo-rank.index');
             Route::post('seo-rank/keywords', [SeoRankController::class, 'storeKeyword'])->name('seo-rank.keywords.store');
             Route::post('seo-rank/import', [SeoRankController::class, 'import'])->name('seo-rank.import');
