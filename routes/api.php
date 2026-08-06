@@ -130,6 +130,13 @@ Route::prefix('v1')->middleware('api.key')->group(function () {
         ->name('tools.sitemap-check')
         ->middleware('throttle:5,1');
 
+    // Onboarding quiz finalize — public (creates the account when no Bearer
+    // token is sent), or authenticated (e.g. after Google OAuth) to attach
+    // domains/plan/questionnaire to the already-created user.
+    Route::post('onboarding/quiz', [\App\Http\Controllers\Onboarding\OnboardingQuizController::class, 'finalize'])
+        ->name('onboarding.quiz')
+        ->middleware('throttle:10,1');
+
     // SEO site crawler — crawls all internal links (up to 20 pages)
     Route::post('tools/seo-crawl', [SeoCheckerController::class, 'crawl'])
         ->name('tools.seo-crawl')
@@ -715,6 +722,9 @@ Route::prefix('v1')->middleware('api.key')->group(function () {
 
         // Experience feedback results
         Route::get('feedback', [\App\Http\Controllers\Admin\AdminFeedbackController::class, 'index'])->name('feedback');
+
+        // "Get started" onboarding questionnaire responses
+        Route::get('onboarding-quiz', [\App\Http\Controllers\Admin\AdminQuestionnaireController::class, 'index'])->name('onboarding-quiz');
 
         // Live customer-service chats
         Route::prefix('support-chats')->name('support-chats.')->group(function () {

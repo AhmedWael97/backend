@@ -1,0 +1,48 @@
+<?php
+
+namespace App\Http\Controllers\Admin;
+
+use App\Http\Controllers\Controller;
+use App\Models\QuestionnaireResponse;
+use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
+
+class AdminQuestionnaireController extends Controller
+{
+    /** GET /admin/onboarding-quiz — every "get started" questionnaire response. */
+    public function index(Request $request): JsonResponse
+    {
+        $items = QuestionnaireResponse::with(['user:id,name,email', 'planAssigned:id,name'])
+            ->latest('created_at')
+            ->limit(500)
+            ->get()
+            ->map(fn ($r) => [
+                'id' => $r->id,
+                'role' => $r->role,
+                'sites_managed' => $r->sites_managed,
+                'languages' => $r->languages,
+                'features' => $r->features,
+                'domains' => $r->domains,
+                'plan_assigned' => $r->planAssigned?->name,
+                'user_name' => $r->user?->name,
+                'user_email' => $r->user?->email,
+                'created_at' => $r->created_at,
+            ]);
+
+        // Most-requested feature, across all responses — the single most useful
+        // number for prioritizing the roadmap.
+        $featureCounts = [];
+        foreach (QuestionnaireResponse::whereNotNull('features')->pluck('features') as $features) {
+            foreach ((array) $features as $f) {
+                $featureCounts[$f] = ($featureCounts[$f] ?? 0) + 1;
+            }
+        }
+        arsort($featureCounts);
+
+        return $this->success([
+            'items' => $items,
+            'total' => QuestionnaireResponse::count(),
+            'top_features' => array_slice($featureCounts, 0, 10, true),
+        ]);
+    }
+}
