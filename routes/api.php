@@ -137,6 +137,12 @@ Route::prefix('v1')->middleware('api.key')->group(function () {
         ->name('onboarding.quiz')
         ->middleware('throttle:10,1');
 
+    // Onboarding quiz progress autosave — fired on every step, so an
+    // abandoned attempt is still visible to the superadmin.
+    Route::post('onboarding/quiz/progress', [\App\Http\Controllers\Onboarding\OnboardingQuizController::class, 'progress'])
+        ->name('onboarding.quiz.progress')
+        ->middleware('throttle:30,1');
+
     // SEO site crawler — crawls all internal links (up to 20 pages)
     Route::post('tools/seo-crawl', [SeoCheckerController::class, 'crawl'])
         ->name('tools.seo-crawl')

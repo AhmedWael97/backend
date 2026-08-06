@@ -29,6 +29,52 @@ use Illuminate\Support\Str;
  */
 class OnboardingQuizController extends Controller
 {
+    /**
+     * POST /api/v1/onboarding/quiz/progress — fired as the visitor moves
+     * through the wizard (every "Next" click), so an abandoned attempt is
+     * still visible to the superadmin: who started, how far they got, and
+     * whatever they'd answered so far. Upserted by visitor_id (a random id
+     * the frontend generates once and keeps in localStorage) — no account
+     * needed yet.
+     */
+    public function progress(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'visitor_id' => ['required', 'string', 'max:64'],
+            'role' => ['nullable', 'in:site_owner,marketer'],
+            'sites_managed' => ['nullable', 'integer', 'min:0', 'max:1000'],
+            'languages' => ['array'],
+            'languages.*' => ['string', 'max:40'],
+            'features' => ['array'],
+            'features.*' => ['string', 'max:60'],
+            'domains' => ['array', 'max:10'],
+            'domains.*.domain' => ['required', 'string', 'max:255'],
+            'domains.*.seo_score' => ['nullable', 'numeric'],
+            'domains.*.speed_score' => ['nullable', 'numeric'],
+            'domains.*.pages_found' => ['nullable', 'integer'],
+            'step_reached' => ['required', 'integer', 'min:1', 'max:6'],
+        ]);
+
+        $existing = QuestionnaireResponse::where('visitor_id', $data['visitor_id'])->first();
+        if ($existing?->completed) {
+            return $this->success(['saved' => true]); // already finished — don't overwrite with a stray late autosave
+        }
+
+        QuestionnaireResponse::updateOrCreate(
+            ['visitor_id' => $data['visitor_id']],
+            [
+                'role' => $data['role'] ?? null,
+                'sites_managed' => $data['sites_managed'] ?? null,
+                'languages' => $data['languages'] ?? [],
+                'features' => $data['features'] ?? [],
+                'domains' => $data['domains'] ?? [],
+                'step_reached' => $data['step_reached'],
+            ]
+        );
+
+        return $this->success(['saved' => true]);
+    }
+
     public function finalize(Request $request): JsonResponse
     {
         $user = auth('sanctum')->user();
@@ -47,8 +93,10 @@ class OnboardingQuizController extends Controller
             'domains.*.pages_found' => ['nullable', 'integer'],
         ];
         if (!$user) {
-            $rules['email'] = ['required', 'email', 'max:255'];
-            $rules['name'] = ['nullable', 'string', 'max:255'];
+            $rules['first_name'] = ['required', 'string', 'max:120'];
+            $rules['last_name'] = ['required', 'string', 'max:120'];
+            $rules['email'] = ['required', 'email', 'max:255', 'unique:users,email'];
+            $rules['password'] = ['required', 'string', 'min:8', 'confirmed'];
         }
 
         $validator = Validator::make($request->all(), $rules);
@@ -60,36 +108,30 @@ class OnboardingQuizController extends Controller
         $token = null;
         if (!$user) {
             $email = strtolower(trim($data['email']));
-            $user = User::where('email', $email)->first();
+            $name = trim($data['first_name'] . ' ' . $data['last_name']);
 
-            if ($user && !$user->isActive()) {
-                return $this->error('Your account is suspended.', 403);
+            $user = User::create([
+                'name' => $name,
+                'email' => $email,
+                'password' => $data['password'], // hashed via cast
+                'api_key' => Str::random(64),
+                'locale' => 'en',
+                'timezone' => 'UTC',
+                'appearance' => 'system',
+                'role' => 'user',
+                'status' => 'active',
+                'referral_code' => User::generateReferralCode(),
+            ]);
+            Referral::maybeCreate($request->input('referral_code'), $user);
+
+            if (!config('app.email_verification_enabled', false)) {
+                $user->markEmailAsVerified();
             }
 
-            if (!$user) {
-                $user = User::create([
-                    'name' => $data['name'] ?: ucfirst(explode('@', $email)[0]),
-                    'email' => $email,
-                    'password' => null,
-                    'api_key' => Str::random(64),
-                    'locale' => 'en',
-                    'timezone' => 'UTC',
-                    'appearance' => 'system',
-                    'role' => 'user',
-                    'status' => 'active',
-                    'referral_code' => User::generateReferralCode(),
-                ]);
-                Referral::maybeCreate($request->input('referral_code'), $user);
-
-                if (!config('app.email_verification_enabled', false)) {
-                    $user->markEmailAsVerified();
-                }
-
-                try {
-                    \Illuminate\Support\Facades\Mail::to($user->email)->queue(new \App\Mail\WelcomeMail($user));
-                } catch (\Throwable $e) {
-                    report($e);
-                }
+            try {
+                \Illuminate\Support\Facades\Mail::to($user->email)->queue(new \App\Mail\WelcomeMail($user));
+            } catch (\Throwable $e) {
+                report($e);
             }
 
             $token = $user->createToken('api')->plainTextToken;
@@ -142,7 +184,8 @@ class OnboardingQuizController extends Controller
             ];
         }
 
-        QuestionnaireResponse::create([
+        $visitorId = $request->input('visitor_id');
+        $responseFields = [
             'user_id' => $user->id,
             'role' => $data['role'],
             'sites_managed' => $data['sites_managed'],
@@ -150,7 +193,14 @@ class OnboardingQuizController extends Controller
             'features' => $data['features'] ?? [],
             'domains' => $data['domains'] ?? [],
             'plan_assigned_id' => $plan?->id,
-        ]);
+            'completed' => true,
+            'step_reached' => 6,
+        ];
+        if ($visitorId) {
+            QuestionnaireResponse::updateOrCreate(['visitor_id' => $visitorId], $responseFields + ['visitor_id' => $visitorId]);
+        } else {
+            QuestionnaireResponse::create($responseFields);
+        }
 
         return $this->success([
             'token' => $token,

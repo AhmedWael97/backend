@@ -11,11 +11,14 @@ class QuestionnaireResponse extends Model
 
     protected $fillable = [
         'user_id',
+        'visitor_id',
         'role',
         'sites_managed',
         'languages',
         'features',
         'domains',
+        'completed',
+        'step_reached',
         'plan_assigned_id',
     ];
 
@@ -23,6 +26,7 @@ class QuestionnaireResponse extends Model
         'languages' => 'array',
         'features' => 'array',
         'domains' => 'array',
+        'completed' => 'boolean',
         'created_at' => 'datetime',
     ];
 

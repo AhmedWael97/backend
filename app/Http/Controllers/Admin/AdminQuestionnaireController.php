@@ -18,6 +18,9 @@ class AdminQuestionnaireController extends Controller
             ->get()
             ->map(fn ($r) => [
                 'id' => $r->id,
+                'visitor_id' => $r->visitor_id,
+                'completed' => $r->completed,
+                'step_reached' => $r->step_reached,
                 'role' => $r->role,
                 'sites_managed' => $r->sites_managed,
                 'languages' => $r->languages,
