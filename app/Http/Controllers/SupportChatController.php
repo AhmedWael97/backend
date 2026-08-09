@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\SupportChat;
 use App\Models\SupportMessage;
+use App\Services\SupportAutoReplyService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
@@ -57,6 +58,8 @@ class SupportChatController extends Controller
             $this->notifySupport($request, $chat, $data['body']);
         }
 
+        app(SupportAutoReplyService::class)->reply($chat, $request->user());
+
         return $this->success($this->payload($chat->fresh()));
     }
 
@@ -78,6 +81,7 @@ class SupportChatController extends Controller
                 ->map(fn (SupportMessage $m) => [
                     'id' => $m->id,
                     'is_admin' => $m->is_admin,
+                    'is_ai' => $m->is_ai,
                     'body' => $m->body,
                     'created_at' => $m->created_at,
                 ]),

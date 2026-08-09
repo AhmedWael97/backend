@@ -92,6 +92,7 @@ class AdminSupportChatController extends Controller
                 ->map(fn (SupportMessage $m) => [
                     'id' => $m->id,
                     'is_admin' => $m->is_admin,
+                    'is_ai' => $m->is_ai,
                     'body' => $m->body,
                     'created_at' => $m->created_at,
                 ]),

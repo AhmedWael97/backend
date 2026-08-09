@@ -7,11 +7,11 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class SupportMessage extends Model
 {
-    protected $fillable = ['chat_id', 'sender_user_id', 'is_admin', 'body'];
+    protected $fillable = ['chat_id', 'sender_user_id', 'is_admin', 'is_ai', 'body'];
 
     protected function casts(): array
     {
-        return ['is_admin' => 'boolean'];
+        return ['is_admin' => 'boolean', 'is_ai' => 'boolean'];
     }
 
     public function chat(): BelongsTo
