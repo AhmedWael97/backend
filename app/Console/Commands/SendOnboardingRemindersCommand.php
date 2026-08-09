@@ -11,10 +11,13 @@ use Illuminate\Support\Facades\Mail;
 
 /**
  * 3-part activation drip for users who signed up but never added a domain —
- * Day 1 / Day 3 / Day 5 since signup, each sent at most once (guarded by
- * onboarding_reminder_stage). Stops the moment a domain or org membership
- * shows up, or the account is 14+ days old (no point nagging a cold lead
- * forever).
+ * Day 1 / Day 3 / Day 5, each sent at most once (guarded by
+ * onboarding_reminder_stage). Stage 1 also sweeps up old backlog signups
+ * (no upper age limit beyond 180d — a dormant account from months ago still
+ * gets a first nudge). Stages 2/3 are gated off the PREVIOUS stage's send
+ * time, not original signup — so a backlog user caught up at stage 1 today
+ * gets stage 2 two days from today, not immediately in the same run.
+ * Stops the moment a domain or org membership shows up.
  */
 class SendOnboardingRemindersCommand extends Command
 {
@@ -63,16 +66,27 @@ class SendOnboardingRemindersCommand extends Command
         $sent = 0;
 
         foreach ($stages as $stage => $cfg) {
-            $users = User::query()
+            $query = User::query()
                 ->where('role', 'user')
                 ->where('onboarding_reminder_stage', $stage - 1)
-                ->where('created_at', '<=', now()->subHours($cfg['minHours']))
-                ->where('created_at', '>=', now()->subDays(14))
                 ->whereDoesntHave('domains')
                 ->whereDoesntHave('organizationMemberships')
-                ->whereNotIn('email', EmailSuppression::pluck('email'))
-                ->limit(200)
-                ->get();
+                ->whereNotIn('email', EmailSuppression::pluck('email'));
+
+            if ($stage === 1) {
+                // First touch: gated off signup age. No lower bound beyond
+                // 24h, and a generous 180d ceiling just to skip truly dead
+                // accounts — this is what catches the old-signup backlog.
+                $query->where('created_at', '<=', now()->subHours($cfg['minHours']))
+                    ->where('created_at', '>=', now()->subDays(180));
+            } else {
+                // Later touches: gated off the PREVIOUS email's send time, so
+                // spacing is real days-apart even for backlog users who just
+                // got stage 1 today.
+                $query->where('onboarding_reminder_sent_at', '<=', now()->subHours($cfg['minHours'] - $stages[$stage - 1]['minHours']));
+            }
+
+            $users = $query->limit(200)->get();
 
             foreach ($users as $user) {
                 $name = $user->name ?: 'there';
