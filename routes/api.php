@@ -436,6 +436,11 @@ Route::prefix('v1')->middleware('api.key')->group(function () {
             Route::delete('members/{userId}', [OrganizationController::class, 'removeMember'])->name('members.remove');
         });
 
+        // Sandbox — NOT behind `subscribed`: the whole point is letting a
+        // brand-new (or trial-expired) user explore real pages with real
+        // seeded data before/without paying.
+        Route::get('demo/domain', [\App\Http\Controllers\Domain\DemoDomainController::class, 'show'])->name('demo.domain');
+
         // Plan-upgrade tickets (manual upgrade path) — NOT behind `subscribed`,
         // so a trial-expired user can still request an upgrade.
         Route::prefix('upgrade-tickets')->name('upgrade-tickets.')->group(function () {

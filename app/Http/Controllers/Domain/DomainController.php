@@ -25,7 +25,11 @@ class DomainController extends Controller
         } else {
             // Personal domains + org domains the user may access (owner/admin: all
             // org domains; member: only assigned). Centralised in the scope.
+            // The shared sandbox domain is reachable directly by id (accessibleBy
+            // allows it), but stays out of the "my domains" management list —
+            // it's surfaced separately, read-only, via GET /demo/domain.
             $domains = Domain::accessibleBy($user)
+                ->where('is_demo', false)
                 ->with('exclusions')
                 ->latest()
                 ->get();

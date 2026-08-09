@@ -20,7 +20,7 @@ trait SendsDigest
     {
         // Centralised access: an org member's digest covers domains they were
         // granted, not just ones they personally own.
-        $domains = Domain::accessibleBy($user)->get();
+        $domains = Domain::accessibleBy($user)->where('is_demo', false)->get();
         if ($domains->isEmpty()) {
             return false;
         }

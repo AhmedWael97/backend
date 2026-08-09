@@ -175,7 +175,7 @@ class User extends Authenticatable implements MustVerifyEmail
     /** Centralised single-domain access check (mirrors Domain::scopeAccessibleBy). */
     public function canAccessDomain(Domain $domain): bool
     {
-        if ($this->isSuperAdmin() || (int) $domain->user_id === (int) $this->id) {
+        if ($this->isSuperAdmin() || (int) $domain->user_id === (int) $this->id || $domain->is_demo) {
             return true;
         }
 

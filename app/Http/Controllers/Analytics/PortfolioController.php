@@ -31,7 +31,7 @@ class PortfolioController extends Controller
     public function insights(Request $request): JsonResponse
     {
         $user = $request->user();
-        $domains = Domain::accessibleBy($user)->get(['id', 'domain']);
+        $domains = Domain::accessibleBy($user)->where('is_demo', false)->get(['id', 'domain']);
 
         $findings = Cache::remember(
             'insights:portfolio:' . $user->id,
@@ -149,7 +149,7 @@ class PortfolioController extends Controller
         $priorEnd = (clone $start);
         $priorStart = (clone $priorEnd)->subDays($days);
 
-        $domains = Domain::accessibleBy($user)->get(['id', 'domain']);
+        $domains = Domain::accessibleBy($user)->where('is_demo', false)->get(['id', 'domain']);
 
         $idToName = [];
         foreach ($domains as $d) {

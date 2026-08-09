@@ -114,7 +114,7 @@ class LeadController extends Controller
         $user = $request->user();
         // Use centralised access (superadmin→all, owner→own, org member→granted)
         // so multi-tenant users get warm leads for every site they can see.
-        $domainIds = Domain::accessibleBy($user)->pluck('id')->all();
+        $domainIds = Domain::accessibleBy($user)->where('is_demo', false)->pluck('id')->all();
 
         if (empty($domainIds)) {
             return $this->success(['created' => 0, 'leads' => []]);

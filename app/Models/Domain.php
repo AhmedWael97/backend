@@ -23,12 +23,14 @@ class Domain extends Model
         'script_verified_at',
         'settings',
         'active',
+        'is_demo',
     ];
 
     protected function casts(): array
     {
         return [
             'active' => 'boolean',
+            'is_demo' => 'boolean',
             'script_verified_at' => 'datetime',
             'token_rotated_at' => 'datetime',
             'settings' => 'array',
@@ -102,7 +104,11 @@ class Domain extends Model
             $q->where('domains.user_id', $user->id)
                 ->orWhereIn('domains.id', function ($sub) use ($user) {
                     $sub->select('domain_id')->from('domain_access')->where('user_id', $user->id);
-                });
+                })
+                // Sandbox: the single shared is_demo domain is readable by any
+                // authenticated user, so every real page works against real
+                // (seeded) data before they've connected a site of their own.
+                ->orWhere('domains.is_demo', true);
             if ($adminOrgIds->isNotEmpty()) {
                 $q->orWhereIn('domains.organization_id', $adminOrgIds);
             }
