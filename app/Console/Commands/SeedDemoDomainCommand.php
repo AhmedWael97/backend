@@ -219,9 +219,9 @@ class SeedDemoDomainCommand extends Command
             'description' => 'Home → Pricing → Checkout',
         ]);
         $steps = [
-            PipelineStep::create(['pipeline_id' => $pipeline->id, 'name' => 'Landed', 'url_pattern' => '/', 'match_type' => 'equals', 'order' => 0]),
-            PipelineStep::create(['pipeline_id' => $pipeline->id, 'name' => 'Viewed pricing', 'url_pattern' => '/pricing', 'match_type' => 'equals', 'order' => 1]),
-            PipelineStep::create(['pipeline_id' => $pipeline->id, 'name' => 'Reached checkout', 'url_pattern' => '/checkout', 'match_type' => 'equals', 'order' => 2]),
+            PipelineStep::create(['pipeline_id' => $pipeline->id, 'name' => 'Landed', 'url_pattern' => '/', 'order' => 0]),
+            PipelineStep::create(['pipeline_id' => $pipeline->id, 'name' => 'Viewed pricing', 'url_pattern' => '/pricing', 'order' => 1]),
+            PipelineStep::create(['pipeline_id' => $pipeline->id, 'name' => 'Reached checkout', 'url_pattern' => '/checkout', 'order' => 2]),
         ];
 
         // Realistic drop-off: everyone hits step 0, ~45% step 1, ~18% step 2.
