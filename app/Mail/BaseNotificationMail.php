@@ -13,15 +13,15 @@ abstract class BaseNotificationMail extends Mailable
 {
     use Queueable, SerializesModels;
 
-    // Not readonly: SerializesModels re-hydrates the $recipient model on the
-    // queue worker by writing to this property from its own scope after
-    // construction (queued mail is serialized then unserialized) — a
-    // readonly property can only be initialized once, from the declaring
-    // class, so that second write throws "Cannot initialize readonly
-    // property" and the job dies before ever sending.
+    // Not readonly: SerializesModels rewrites every public constructor-
+    // promoted property (not just the Eloquent model ones) when a queued
+    // Mailable is unserialized on the worker — a readonly property can only
+    // be initialized once, from the declaring class, so that second write
+    // throws "Cannot initialize readonly property" and the job dies before
+    // ever sending. Confirmed via serialize()/unserialize() round-trip.
     public function __construct(
         public User $recipient,
-        public readonly array $data = [],
+        public array $data = [],
     ) {
     }
 
