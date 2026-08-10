@@ -27,7 +27,7 @@ class ScheduleAnalysisCommand extends Command
                         ->value('generated_at');
 
                     if (!$lastReport || now()->diffInHours($lastReport) >= $interval) {
-                        AnalyzeDomainJob::dispatch($domain->id)->onQueue('ai');
+                        AnalyzeDomainJob::dispatch($domain->id, $domain->user_id)->onQueue('ai');
                         $this->line("Queued analysis for domain #{$domain->id}");
                     }
                 }
