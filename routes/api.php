@@ -500,7 +500,7 @@ Route::prefix('v1')->middleware('api.key')->group(function () {
             Route::delete('{id}', [SharedReportController::class, 'destroy'])->name('destroy');
         });
 
-        // Saved views â€” domain-scoped alias for frontend (/saved-views/{domainId})
+        // Saved views — domain-scoped alias for frontend (/saved-views/{domainId})
         Route::get('saved-views/{domainId}', [SavedViewController::class, 'index'])->name('saved-views.index');
         Route::post('saved-views/{domainId}', [SavedViewController::class, 'store'])->name('saved-views.store');
         Route::delete('saved-views/item/{view}', [SavedViewController::class, 'destroy'])->name('saved-views.destroy');
@@ -600,7 +600,7 @@ Route::prefix('v1')->middleware('api.key')->group(function () {
 
         /*
         |--------------------------------------------------------------------------
-        | Analytics by domain ID â€” model-binding aliases for frontend
+        | Analytics by domain ID — model-binding aliases for frontend
         | The {domain} param triggers implicit model binding (Domain::find($id))
         |--------------------------------------------------------------------------
         */
