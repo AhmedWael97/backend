@@ -30,7 +30,7 @@ class SendDomainCheckupCommand extends Command
             ->whereNull('checkup_sent_at')
             ->whereHas('domains', fn ($q) => $q->where('domains.created_at', '<', now()->subHours(24)))
             ->whereNotIn('email', EmailSuppression::pluck('email'))
-            ->with('domains:id,user_id,domain')
+            ->with('domains:id,user_id,domain,script_token')
             ->limit(200)
             ->get();
 
@@ -52,7 +52,13 @@ class SendDomainCheckupCommand extends Command
             }
 
             $name = $user->name ?: 'there';
-            $domain = optional($user->domains->first())->domain;
+            $firstDomain = $user->domains->first();
+            $domain = optional($firstDomain)->domain;
+            // No-login guide, so a stuck non-technical user (or the developer
+            // they forward this to) doesn't have to sign in just to see steps.
+            $ctaUrl = $firstDomain
+                ? "{$appUrl}/en/install/{$firstDomain->script_token}"
+                : "{$appUrl}/en/connect";
             try {
                 Mail::to($user->email)->queue(new BrandedEmail(
                     'No data from your site yet? Let\'s fix that',
@@ -61,11 +67,10 @@ class SendDomainCheckupCommand extends Command
                         'heading' => "Hi {$name}, we haven't seen any visitors yet",
                         'lines' => [
                             "You added " . ($domain ? "<strong>{$domain}</strong>" : 'your website') . " to EYE — nice! But we haven't received a single visit from it yet, which usually means the <strong>tracking snippet isn't installed</strong> (or not on every page).",
-                            "Two quick things to check: the snippet is pasted just before <code>&lt;/head&gt;</code>, and it's on your live site (not only a draft/preview).",
-                            "Open your dashboard and hit <strong>Verify installation</strong> — it tells you instantly whether EYE can see your site.",
+                            "Tap the button below — no login needed. Pick your platform (WordPress, Shopify, Tag Manager, or plain HTML) and follow the exact steps, or forward the link to whoever manages your site.",
                         ],
-                        'ctaText' => 'Verify my installation',
-                        'ctaUrl' => "{$appUrl}/en/settings/domains",
+                        'ctaText' => 'See install steps',
+                        'ctaUrl' => $ctaUrl,
                         'replyNote' => "Not sure where to paste it, or on a platform we didn't cover? <strong>Reply to this email</strong> and we'll walk you through it.",
                         'unsubUrl' => EmailController::unsubscribeUrl($user->email),
                     ]

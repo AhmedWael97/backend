@@ -237,6 +237,16 @@ Route::prefix('v1')->middleware('api.key')->group(function () {
         ->name('contact')
         ->middleware('throttle:10,1');
 
+    // Public, no-login install guide — keyed by the domain's own script_token
+    // (already public client-side), so a stalled non-technical signup can be
+    // pointed straight here without hitting a login wall first.
+    Route::prefix('install-guide')->name('install-guide.')->group(function () {
+        Route::get('{token}', [\App\Http\Controllers\Domain\PublicInstallGuideController::class, 'show'])
+            ->name('show')->middleware('throttle:60,1');
+        Route::get('{token}/verify', [\App\Http\Controllers\Domain\PublicInstallGuideController::class, 'verify'])
+            ->name('verify')->middleware('throttle:60,1');
+    });
+
     // Public support chat for logged-out website visitors
     Route::prefix('support/guest')->name('support.guest.')->group(function () {
         Route::post('chat', [\App\Http\Controllers\GuestSupportChatController::class, 'start'])
