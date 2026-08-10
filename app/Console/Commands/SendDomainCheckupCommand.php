@@ -57,18 +57,27 @@ class SendDomainCheckupCommand extends Command
             // No-login guide, so a stuck non-technical user (or the developer
             // they forward this to) doesn't have to sign in just to see steps.
             $ctaUrl = $firstDomain
-                ? "{$appUrl}/en/install/{$firstDomain->script_token}"
-                : "{$appUrl}/en/connect";
+                ? "{$appUrl}/en/install/{$firstDomain->script_token}?utm_source=email&utm_medium=lifecycle&utm_campaign=domain_checkup"
+                : "{$appUrl}/en/connect?utm_source=email&utm_medium=lifecycle&utm_campaign=domain_checkup";
+            $snippetLine = '';
+            if ($firstDomain) {
+                $snippet = "<script src=\"{$appUrl}/tracker/eye.js\" data-token=\"{$firstDomain->script_token}\" data-api=\"{$appUrl}/api/collect\" async></script>";
+                $escaped = e($snippet);
+                $snippetLine = "<code style=\"display:block;background:#f4f5f7;border:1px solid #e6e8eb;border-radius:8px;padding:12px 14px;font-family:monospace;font-size:12.5px;color:#3c4149;white-space:pre-wrap;word-break:break-all;\">{$escaped}</code>";
+            }
+
             try {
                 Mail::to($user->email)->queue(new BrandedEmail(
                     'No data from your site yet? Let\'s fix that',
                     [
                         'preheader' => 'Your tracking snippet may not be installed — quick check inside.',
                         'heading' => "Hi {$name}, we haven't seen any visitors yet",
-                        'lines' => [
+                        'lines' => array_filter([
                             "You added " . ($domain ? "<strong>{$domain}</strong>" : 'your website') . " to EYE — nice! But we haven't received a single visit from it yet, which usually means the <strong>tracking snippet isn't installed</strong> (or not on every page).",
-                            "Tap the button below — no login needed. Pick your platform (WordPress, Shopify, Tag Manager, or plain HTML) and follow the exact steps, or forward the link to whoever manages your site.",
-                        ],
+                            "Here's your tag — paste it just before <code>&lt;/head&gt;</code> on every page, or forward this whole email to whoever manages your site:",
+                            $snippetLine,
+                            "Not sure where that goes on your platform? Tap below — no login needed. Pick WordPress, Shopify, Tag Manager, or plain HTML for exact steps.",
+                        ]),
                         'ctaText' => 'See install steps',
                         'ctaUrl' => $ctaUrl,
                         'replyNote' => "Not sure where to paste it, or on a platform we didn't cover? <strong>Reply to this email</strong> and we'll walk you through it.",

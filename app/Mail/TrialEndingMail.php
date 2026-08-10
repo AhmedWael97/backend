@@ -24,7 +24,7 @@ class TrialEndingMail extends BaseNotificationMail
             'name' => $this->recipient->name,
             'daysLeft' => (int) ($this->data['days_left'] ?? 5),
             'visitors' => (int) ($this->data['visitors'] ?? 0),
-            'billingUrl' => config('app.frontend_url') . '/settings/billing?trial=ending',
+            'billingUrl' => config('app.frontend_url') . '/settings/billing?trial=ending&utm_source=email&utm_medium=lifecycle&utm_campaign=trial_ending',
             'unsubscribeUrl' => $this->unsubscribeUrl('trial_ending'),
         ]);
     }

@@ -28,7 +28,8 @@ class SendOnboardingRemindersCommand extends Command
     public function handle(): int
     {
         $appUrl = rtrim((string) (config('app.frontend_url') ?: config('app.url')), '/');
-        $connectLink = "{$appUrl}/en/connect";
+        // UTM-tagged so returns from this drip show up in our own (dogfooded)
+        // Campaigns dashboard, split by stage — real return-rate signal per email.
 
         $stages = [
             1 => [
@@ -87,6 +88,7 @@ class SendOnboardingRemindersCommand extends Command
             }
 
             $users = $query->limit(200)->get();
+            $connectLink = "{$appUrl}/en/connect?utm_source=email&utm_medium=lifecycle&utm_campaign=onboarding_drip&utm_content=day{$cfg['minHours']}";
 
             foreach ($users as $user) {
                 $name = $user->name ?: 'there';
