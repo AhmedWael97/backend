@@ -12,7 +12,11 @@ class AdminPlanController extends Controller
 {
     public function index(): JsonResponse
     {
-        return $this->success(Plan::orderBy('sort_order')->get());
+        return $this->success(
+            Plan::withCount(['subscriptions as subscriptions_count' => function ($q) {
+                $q->where('status', 'active');
+            }])->orderBy('sort_order')->get()
+        );
     }
 
     public function store(Request $request): JsonResponse
