@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Onboarding;
 
 use App\Http\Controllers\Controller;
+use App\Services\DomainGuard;
 use App\Models\Domain;
 use App\Models\Plan;
 use App\Models\QuestionnaireResponse;
@@ -164,10 +165,13 @@ class OnboardingQuizController extends Controller
         }
 
         $createdDomains = [];
+        $skippedDomains = [];
         foreach ($domainInputs as $host) {
-            $host = preg_replace('#^https?://#i', '', $host);
-            $host = rtrim(explode('/', $host)[0], '/');
-            if ($host === '') {
+            $host = DomainGuard::normalize((string) $host);
+            if ($host === '' || !DomainGuard::isAddable($host)) {
+                if ($host !== '') {
+                    $skippedDomains[] = $host;
+                }
                 continue;
             }
             $existing = $user->domains()->where('domain', $host)->first();
@@ -206,6 +210,7 @@ class OnboardingQuizController extends Controller
             'token' => $token,
             'user' => $user->refresh()->only(['id', 'name', 'email', 'role']),
             'domains' => $createdDomains,
+            'skipped_domains' => $skippedDomains,
             'plan' => $plan ? ['id' => $plan->id, 'name' => $plan->name, 'slug' => $plan->slug] : null,
             'trial_ends_at' => $user->effectiveSubscription()?->current_period_end,
         ], 201);

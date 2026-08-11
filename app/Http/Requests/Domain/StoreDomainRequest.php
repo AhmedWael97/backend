@@ -2,18 +2,11 @@
 
 namespace App\Http\Requests\Domain;
 
+use App\Services\DomainGuard;
 use Illuminate\Foundation\Http\FormRequest;
 
 class StoreDomainRequest extends FormRequest
 {
-    /**
-     * A hostname: one or more dot-separated labels ending in an alphabetic TLD.
-     * Labels are 1–63 chars, alphanumeric, may contain inner hyphens.
-     * Matches example.com / www.example.com / sub.example.co.uk — not IPs,
-     * not localhost, not a bare word.
-     */
-    private const HOSTNAME = '/^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/';
-
     public function authorize(): bool
     {
         return true;
@@ -22,15 +15,21 @@ class StoreDomainRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'domain' => ['required', 'string', 'max:253', 'regex:' . self::HOSTNAME],
+            'domain' => [
+                'required',
+                'string',
+                'max:253',
+                function ($attribute, $value, $fail) {
+                    if (!DomainGuard::isValidFormat((string) $value)) {
+                        $fail('Enter a valid domain like example.com or www.example.com (no http://, no paths).');
+                        return;
+                    }
+                    if (!DomainGuard::isResolvable((string) $value)) {
+                        $fail("We couldn't find that domain online — double-check it's correct and already live before adding it.");
+                    }
+                },
+            ],
             'settings' => ['sometimes', 'array'],
-        ];
-    }
-
-    public function messages(): array
-    {
-        return [
-            'domain.regex' => 'Enter a valid domain like example.com or www.example.com (no http://, no paths).',
         ];
     }
 
@@ -44,15 +43,6 @@ class StoreDomainRequest extends FormRequest
             return;
         }
 
-        $domain = strtolower(trim((string) $this->input('domain')));
-        $domain = preg_replace('#^[a-z][a-z0-9+.-]*://#', '', $domain); // scheme
-        $domain = preg_replace('#^[^/@]*@#', '', $domain);              // userinfo
-        $domain = explode('/', $domain, 2)[0];                          // path
-        $domain = explode('?', $domain, 2)[0];                          // query
-        $domain = explode('#', $domain, 2)[0];                          // fragment
-        $domain = explode(':', $domain, 2)[0];                          // port
-        $domain = rtrim($domain, '.');                                  // trailing dot
-
-        $this->merge(['domain' => $domain]);
+        $this->merge(['domain' => DomainGuard::normalize((string) $this->input('domain'))]);
     }
 }

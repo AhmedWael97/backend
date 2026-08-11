@@ -31,3 +31,4 @@ Schedule::command('eye:send-trial-tips')->dailyAt('09:30');
 // Check-up: domain added but zero events (snippet likely missing). Once/user, off-peak.
 Schedule::command('eye:send-domain-checkup')->dailyAt('10:00');
 Schedule::command('eye:suggest-connect-checked-domains')->dailyAt('11:00');
+Schedule::command('eye:cleanup-stale-domains')->dailyAt('03:30');
