@@ -9,10 +9,26 @@ use Illuminate\Http\Request;
 
 class AdminQuestionnaireController extends Controller
 {
-    /** GET /admin/onboarding-quiz — every "get started" questionnaire response. */
+    /**
+     * Rows where the visitor bounced before answering anything — landed on
+     * step 1, autosave fired once with every real field still null/empty.
+     * Not a useful "response" to show or count.
+     */
+    private function scopeAnswered($query)
+    {
+        return $query->where(function ($q) {
+            $q->whereNotNull('role')
+                ->orWhereNotNull('sites_managed')
+                ->orWhereRaw('json_array_length(languages) > 0')
+                ->orWhereRaw('json_array_length(features) > 0')
+                ->orWhereRaw('json_array_length(domains) > 0');
+        });
+    }
+
+    /** GET /admin/onboarding-quiz — every "get started" questionnaire response with at least one real answer. */
     public function index(Request $request): JsonResponse
     {
-        $items = QuestionnaireResponse::with(['user:id,name,email', 'planAssigned:id,name'])
+        $items = $this->scopeAnswered(QuestionnaireResponse::with(['user:id,name,email', 'planAssigned:id,name']))
             ->latest('created_at')
             ->limit(500)
             ->get()
@@ -44,7 +60,7 @@ class AdminQuestionnaireController extends Controller
 
         return $this->success([
             'items' => $items,
-            'total' => QuestionnaireResponse::count(),
+            'total' => $this->scopeAnswered(QuestionnaireResponse::query())->count(),
             'top_features' => array_slice($featureCounts, 0, 10, true),
         ]);
     }
