@@ -154,4 +154,13 @@ return [
         'key' => env('SERPER_API_KEY'),
     ],
 
+    // DataForSEO — richer than Serper's plain SERP results: search volume,
+    // CPC, competition, keyword difficulty. Not used for rank-checking
+    // (Serper already does that) — reserved for keyword-research enrichment.
+    'dataforseo' => [
+        'login' => env('DATAFORSEO_LOGIN'),
+        'password' => env('DATAFORSEO_API_PASSWORD'),
+        'basic_auth' => env('DATAFORSEO_API_BASE64_PASSWORD'), // base64(login:password), used directly as the Authorization header value
+    ],
+
 ];
