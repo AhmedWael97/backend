@@ -27,8 +27,10 @@ class UxPerformanceController extends Controller
         // ── Page load timing ──────────────────────────────────────────────────
         // Backgrounded/hidden tabs can leave `loadEventEnd` pending for hours
         // (browsers throttle timers off-screen), so a single sample can report
-        // a load time of literally hours. Cap at 60s — beyond that it's a
-        // suspended-tab artifact, not a real user-perceived load time.
+        // a load time of literally hours. A ceiling alone isn't enough — a
+        // one-off suspended-tab sample still clusters right under the cap and
+        // dominates the ranking, so also require >=2 samples: "Quick wins"
+        // should surface repeated problems, not one freak measurement.
         $loadRows = $this->clickhouse->select("
             SELECT
                 replaceRegexpOne(url, '^(https?://)www\\.', '\\\\1') AS url,
@@ -43,15 +45,18 @@ class UxPerformanceController extends Controller
               AND type = 'page_load'
               AND created_at >= '{$from} 00:00:00'
               AND created_at <= '{$to} 23:59:59'
-              AND JSONExtractFloat(details, 'load_event') BETWEEN 0 AND 60000
+              AND JSONExtractFloat(details, 'load_event') BETWEEN 0 AND 30000
             GROUP BY url
+            HAVING samples >= 2
             ORDER BY avg_load_event DESC
             LIMIT 100
         ");
 
         // ── Slow resources ────────────────────────────────────────────────────
-        // Same tab-suspension artifact applies to resource `duration`, capped
-        // at 30s. Third-party ad/analytics beacons (gtag, Facebook pixel,
+        // Same tab-suspension artifact applies to resource `duration` — capped
+        // and requires >=2 occurrences for the same reason as above. Third-
+        // party ad/analytics beacons (gtag, Google Ads pagead/ccm/rmkt/gsi
+        // endpoints across any google.com locale subdomain, Facebook pixel,
         // TikTok, etc.) are excluded — they can't be deferred or self-hosted
         // without breaking conversion tracking, so recommending them is not
         // actionable, and their URL's last path segment is often just a
@@ -73,9 +78,10 @@ class UxPerformanceController extends Controller
                   AND created_at >= '{$from} 00:00:00'
                   AND created_at <= '{$to} 23:59:59'
             )
-            WHERE JSONExtractFloat(resource, 'duration') BETWEEN 0 AND 30000
-              AND NOT match(JSONExtractString(resource, 'name'), '(googletagmanager\\.com|google-analytics\\.com|googleadservices\\.com|doubleclick\\.net|facebook\\.(com|net)|analytics\\.tiktok\\.com|clarity\\.ms|googlesyndication\\.com)')
+            WHERE JSONExtractFloat(resource, 'duration') BETWEEN 0 AND 20000
+              AND NOT match(JSONExtractString(resource, 'name'), '(pagead|/gsi/|/ccm/collect|/rmkt/collect|googletagmanager\\.com|google-analytics\\.com|googleadservices\\.com|doubleclick\\.net|facebook\\.(com|net)|analytics\\.tiktok\\.com|clarity\\.ms|googlesyndication\\.com)')
             GROUP BY asset_url, asset_type
+            HAVING occurrences >= 2
             ORDER BY avg_duration DESC
             LIMIT 50
         ");
