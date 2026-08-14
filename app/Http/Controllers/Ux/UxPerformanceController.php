@@ -25,6 +25,10 @@ class UxPerformanceController extends Controller
         $to = $request->query('to', now()->format('Y-m-d'));
 
         // ── Page load timing ──────────────────────────────────────────────────
+        // Backgrounded/hidden tabs can leave `loadEventEnd` pending for hours
+        // (browsers throttle timers off-screen), so a single sample can report
+        // a load time of literally hours. Cap at 60s — beyond that it's a
+        // suspended-tab artifact, not a real user-perceived load time.
         $loadRows = $this->clickhouse->select("
             SELECT
                 replaceRegexpOne(url, '^(https?://)www\\.', '\\\\1') AS url,
@@ -39,12 +43,19 @@ class UxPerformanceController extends Controller
               AND type = 'page_load'
               AND created_at >= '{$from} 00:00:00'
               AND created_at <= '{$to} 23:59:59'
+              AND JSONExtractFloat(details, 'load_event') BETWEEN 0 AND 60000
             GROUP BY url
             ORDER BY avg_load_event DESC
             LIMIT 100
         ");
 
         // ── Slow resources ────────────────────────────────────────────────────
+        // Same tab-suspension artifact applies to resource `duration`, capped
+        // at 30s. Third-party ad/analytics beacons (gtag, Facebook pixel,
+        // TikTok, etc.) are excluded — they can't be deferred or self-hosted
+        // without breaking conversion tracking, so recommending them is not
+        // actionable, and their URL's last path segment is often just a
+        // numeric account/conversion ID rather than a readable asset name.
         $slowRows = $this->clickhouse->select("
             SELECT
                 JSONExtractString(resource, 'name')         AS asset_url,
@@ -62,6 +73,8 @@ class UxPerformanceController extends Controller
                   AND created_at >= '{$from} 00:00:00'
                   AND created_at <= '{$to} 23:59:59'
             )
+            WHERE JSONExtractFloat(resource, 'duration') BETWEEN 0 AND 30000
+              AND NOT match(JSONExtractString(resource, 'name'), '(googletagmanager\\.com|google-analytics\\.com|googleadservices\\.com|doubleclick\\.net|facebook\\.(com|net)|analytics\\.tiktok\\.com|clarity\\.ms|googlesyndication\\.com)')
             GROUP BY asset_url, asset_type
             ORDER BY avg_duration DESC
             LIMIT 50
