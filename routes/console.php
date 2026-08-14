@@ -32,3 +32,5 @@ Schedule::command('eye:send-trial-tips')->dailyAt('09:30');
 Schedule::command('eye:send-domain-checkup')->dailyAt('10:00');
 Schedule::command('eye:suggest-connect-checked-domains')->dailyAt('11:00');
 Schedule::command('eye:cleanup-stale-domains')->dailyAt('03:30');
+// SEO content: 2 posts/day, each with one guaranteed-valid internal link (see command for the topic->URL map).
+Schedule::command('eye:generate-blog-posts --count=2')->dailyAt('06:00');

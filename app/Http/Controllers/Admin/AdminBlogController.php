@@ -67,6 +67,8 @@ class AdminBlogController extends Controller
             'body_ar' => ['nullable', 'string'],
             'slug' => ['nullable', 'string', 'max:255'],
             'status' => ['nullable', 'in:draft,published'],
+            'related_url' => ['nullable', 'string', 'max:255'],
+            'related_label' => ['nullable', 'string', 'max:255'],
         ]);
     }
 
