@@ -34,3 +34,5 @@ Schedule::command('eye:suggest-connect-checked-domains')->dailyAt('11:00');
 Schedule::command('eye:cleanup-stale-domains')->dailyAt('03:30');
 // SEO content: 2 posts/day, each with one guaranteed-valid internal link (see command for the topic->URL map).
 Schedule::command('eye:generate-blog-posts --count=2')->dailyAt('06:00');
+// Real Google positions for every tracked keyword, via Serper.dev (no-ops if SERPER_API_KEY unset).
+Schedule::command('eye:fetch-seo-rankings')->dailyAt('05:00');

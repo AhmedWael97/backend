@@ -147,4 +147,11 @@ return [
         'access_token' => env('TIKTOK_EVENTS_ACCESS_TOKEN'), // from TikTok Ads Manager → Events → Web Events → Generate Access Token
     ],
 
+    // Serper.dev — real Google SERP results API, powers automated keyword
+    // rank tracking (SeoRankController / eye:fetch-seo-rankings). No-ops
+    // (skips, doesn't error) when the key isn't set.
+    'serper' => [
+        'key' => env('SERPER_API_KEY'),
+    ],
+
 ];
