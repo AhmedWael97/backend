@@ -741,6 +741,8 @@ Route::prefix('v1')->middleware('api.key')->group(function () {
             Route::delete('{id}', [\App\Http\Controllers\Admin\AdminPromoCodeController::class, 'destroy'])->name('destroy');
         });
 
+        Route::get('seo-rankings', [\App\Http\Controllers\Admin\AdminSeoRankingController::class, 'index'])->name('seo-rankings.index');
+
         // Experience feedback results
         Route::get('feedback', [\App\Http\Controllers\Admin\AdminFeedbackController::class, 'index'])->name('feedback');
 
