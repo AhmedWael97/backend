@@ -92,6 +92,10 @@ class OnboardingQuizController extends Controller
             'domains.*.seo_score' => ['nullable', 'numeric'],
             'domains.*.speed_score' => ['nullable', 'numeric'],
             'domains.*.pages_found' => ['nullable', 'integer'],
+            'utm_source' => ['sometimes', 'nullable', 'string', 'max:100'],
+            'utm_medium' => ['sometimes', 'nullable', 'string', 'max:100'],
+            'utm_campaign' => ['sometimes', 'nullable', 'string', 'max:255'],
+            'click_id' => ['sometimes', 'nullable', 'string', 'max:255'],
         ];
         if (!$user) {
             $rules['first_name'] = ['required', 'string', 'max:120'];
@@ -122,6 +126,10 @@ class OnboardingQuizController extends Controller
                 'role' => 'user',
                 'status' => 'active',
                 'referral_code' => User::generateReferralCode(),
+                'signup_utm_source' => $request->input('utm_source'),
+                'signup_utm_medium' => $request->input('utm_medium'),
+                'signup_utm_campaign' => $request->input('utm_campaign'),
+                'signup_click_id' => $request->input('click_id'),
             ]);
             Referral::maybeCreate($request->input('referral_code'), $user);
 

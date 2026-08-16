@@ -35,6 +35,10 @@ class User extends Authenticatable implements MustVerifyEmail
         'ai_free_used',
         'referral_code',
         'openai_api_key',
+        'signup_utm_source',
+        'signup_utm_medium',
+        'signup_utm_campaign',
+        'signup_click_id',
     ];
 
     protected $hidden = [

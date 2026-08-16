@@ -20,6 +20,10 @@ class RegisterRequest extends FormRequest
             'locale' => ['sometimes', 'string', 'in:en,ar'],
             'timezone' => ['sometimes', 'string', 'timezone:all'],
             'referral_code' => ['sometimes', 'nullable', 'string', 'max:20'],
+            'utm_source' => ['sometimes', 'nullable', 'string', 'max:100'],
+            'utm_medium' => ['sometimes', 'nullable', 'string', 'max:100'],
+            'utm_campaign' => ['sometimes', 'nullable', 'string', 'max:255'],
+            'click_id' => ['sometimes', 'nullable', 'string', 'max:255'],
         ];
     }
 }

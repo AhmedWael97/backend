@@ -55,6 +55,14 @@ class RegisterController extends Controller
             'role' => 'user',
             'status' => 'active',
             'referral_code' => User::generateReferralCode(),
+            // First-touch ad attribution, forwarded from the eye_acq cookie the
+            // middleware sets on first landing (see middleware.ts) — lets us
+            // trace a registered user back to the ad session that brought them,
+            // which ClickHouse's post-login visitor_id alone cannot do.
+            'signup_utm_source' => $request->input('utm_source'),
+            'signup_utm_medium' => $request->input('utm_medium'),
+            'signup_utm_campaign' => $request->input('utm_campaign'),
+            'signup_click_id' => $request->input('click_id'),
         ]);
 
         Referral::maybeCreate($request->input('referral_code'), $user);
