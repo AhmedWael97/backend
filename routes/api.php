@@ -479,6 +479,10 @@ Route::prefix('v1')->middleware('api.key')->group(function () {
             Route::post('paymob/initiate', [PaymobController::class, 'initiate'])
                 ->name('billing.paymob.initiate')
                 ->middleware('throttle:10,1');
+            // Paymob — status lookup for the /settings/billing/success page (real order data)
+            Route::get('paymob/status', [PaymobController::class, 'status'])
+                ->name('billing.paymob.status')
+                ->middleware('throttle:30,1');
             // Paddle — initiate checkout (returns client token + price ID for Paddle.js)
             Route::post('paddle/initiate', [PaddleController::class, 'initiate'])
                 ->name('billing.paddle.initiate')

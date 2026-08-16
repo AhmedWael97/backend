@@ -326,6 +326,43 @@ class PaymobController extends Controller
         ]);
     }
 
+    // ── Status lookup (for the /settings/billing/success page) ─────────────
+
+    /**
+     * GET /api/v1/billing/paymob/status?order_id=…
+     *
+     * Authenticated. Paymob's hosted iframe redirects the browser tab here
+     * (redirection URL configured in the Paymob dashboard) with `?order=…`
+     * in the query string. The frontend passes that straight through as
+     * `order_id` so the success page can show REAL payment data — never
+     * trust amount/plan from the redirect query itself, only from our own
+     * Payment row (which the HMAC-verified webhook wrote).
+     */
+    public function status(Request $request): JsonResponse
+    {
+        $request->validate(['order_id' => ['required', 'string']]);
+
+        $payment = Payment::with(['plan', 'user'])
+            ->where('reference', $request->input('order_id'))
+            ->where('user_id', $request->user()->id)
+            ->latest('id')
+            ->first();
+
+        if (!$payment) {
+            return $this->error('Payment not found.', 404);
+        }
+
+        return $this->success([
+            'status' => $payment->status,
+            'order_id' => $payment->reference,
+            'amount' => (float) $payment->amount,
+            'currency' => $payment->currency,
+            'plan' => $payment->plan?->name,
+            'email' => $payment->user?->email,
+            'paid_at' => $payment->paid_at?->toIso8601String(),
+        ]);
+    }
+
     // ── Webhook: payment confirmation ──────────────────────────────────────
 
     /**
