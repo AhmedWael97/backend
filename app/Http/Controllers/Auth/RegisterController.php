@@ -8,6 +8,7 @@ use App\Models\Plan;
 use App\Models\Referral;
 use App\Models\Subscription;
 use App\Models\User;
+use App\Services\DomainGuard;
 use App\Services\TikTokEventsService;
 use Illuminate\Auth\Events\Registered;
 use Illuminate\Http\JsonResponse;
@@ -42,10 +43,27 @@ class RegisterController extends Controller
      */
     public function __invoke(RegisterRequest $request): JsonResponse
     {
+        // Validate the domain BEFORE creating anything — same DomainGuard check
+        // every other domain-creation path uses (StoreDomainRequest, the
+        // onboarding quiz), so a fake/unresolvable domain never gets in via a
+        // fourth, uninspected entry point. Rejecting up front (rather than
+        // creating the account anyway) means no orphaned domain-less user.
+        $domain = DomainGuard::normalize((string) $request->input('domain'));
+        if (!DomainGuard::isValidFormat($domain)) {
+            return $this->error("\"{$domain}\" doesn't look like a real domain (e.g. yoursite.com).", 422);
+        }
+        if (!DomainGuard::isResolvable($domain)) {
+            return $this->error("We couldn't find \"{$domain}\" on the internet — double check it's correct and already live.", 422);
+        }
+
+        $firstName = trim((string) $request->input('first_name'));
+        $lastName = trim((string) $request->input('last_name'));
+
         $user = User::create([
-            // Name is optional at signup (email-first). Fall back to the email's
-            // local-part so the dashboard/greeting still has something to show.
-            'name' => $request->name ?: ucfirst(explode('@', (string) $request->email)[0]),
+            'name' => trim("{$firstName} {$lastName}") ?: ucfirst(explode('@', (string) $request->email)[0]),
+            'first_name' => $firstName,
+            'last_name' => $lastName,
+            'phone' => $request->input('phone'),
             'email' => $request->email,
             'password' => $request->password, // hashed via cast
             'api_key' => Str::random(64),
@@ -56,6 +74,13 @@ class RegisterController extends Controller
             'status' => 'active',
             'referral_code' => User::generateReferralCode(),
         ]);
+
+        $user->domains()->create([
+            'domain' => $domain,
+            'timezone' => $request->input('timezone', 'UTC'),
+            'active' => true,
+        ]);
+        $user->update(['onboarding' => array_merge($user->onboarding ?? [], ['domain_added' => true])]);
 
         Referral::maybeCreate($request->input('referral_code'), $user);
 
@@ -114,7 +139,7 @@ class RegisterController extends Controller
         $token = $user->createToken('api')->plainTextToken;
 
         return $this->success([
-            'user' => $user->refresh()->only(['id', 'name', 'email', 'email_verified_at', 'locale', 'timezone', 'appearance', 'role', 'status']),
+            'user' => $user->refresh()->only(['id', 'name', 'first_name', 'last_name', 'phone', 'email', 'email_verified_at', 'locale', 'timezone', 'appearance', 'role', 'status']),
             'token' => $token,
         ], 201);
     }
