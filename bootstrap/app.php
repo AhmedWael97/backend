@@ -25,7 +25,6 @@ return Application::configure(basePath: dirname(__DIR__))
             'throttle' => \App\Http\Middleware\ThrottleRequests::class,
             'api.key' => \App\Http\Middleware\ApiKeyAuth::class,
             'subscribed' => \App\Http\Middleware\EnsureSubscribed::class,
-            'has_domain' => \App\Http\Middleware\EnsureHasDomain::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
