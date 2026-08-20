@@ -24,6 +24,18 @@ class AnthropicService
      */
     public function complete(string $systemPrompt, string $userMessage, int $maxTokens = 4096): array
     {
+        $text = $this->completeText($systemPrompt, $userMessage, $maxTokens);
+
+        // Strip markdown code fences if present
+        $text = preg_replace('/^```(?:json)?\s*/m', '', $text);
+        $text = preg_replace('/\s*```$/m', '', $text);
+
+        return json_decode(trim($text), true) ?? [];
+    }
+
+    /** Same call as complete(), but returns the raw text response — for plain-language answers, not JSON. */
+    public function completeText(string $systemPrompt, string $userMessage, int $maxTokens = 1024): string
+    {
         $response = Http::withHeaders([
             'x-api-key' => $this->apiKey,
             'anthropic-version' => '2023-06-01',
@@ -46,12 +58,6 @@ class AnthropicService
         }
 
         $data = $response->json();
-        $text = $data['content'][0]['text'] ?? '';
-
-        // Strip markdown code fences if present
-        $text = preg_replace('/^```(?:json)?\s*/m', '', $text);
-        $text = preg_replace('/\s*```$/m', '', $text);
-
-        return json_decode(trim($text), true) ?? [];
+        return $data['content'][0]['text'] ?? '';
     }
 }

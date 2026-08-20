@@ -25,6 +25,35 @@ class SerperService
      */
     public function organicResults(string $query, int $num = 100): array
     {
+        return $this->search($query, $num)['organic'] ?? [];
+    }
+
+    /**
+     * Real "people also search for" phrases — genuine adjacent search intent,
+     * not guessed. Good raw material for content-idea discovery.
+     *
+     * @return array<int, string>
+     */
+    public function relatedSearches(string $query): array
+    {
+        $related = $this->search($query)['relatedSearches'] ?? [];
+        return array_values(array_filter(array_map(fn ($r) => (string) ($r['query'] ?? ''), $related)));
+    }
+
+    /**
+     * Real "People Also Ask" questions for a query — direct evidence of what
+     * people actually want answered, ideal blog-post angles.
+     *
+     * @return array<int, string>
+     */
+    public function peopleAlsoAsk(string $query): array
+    {
+        $paa = $this->search($query)['peopleAlsoAsk'] ?? [];
+        return array_values(array_filter(array_map(fn ($p) => (string) ($p['question'] ?? ''), $paa)));
+    }
+
+    private function search(string $query, int $num = 10): array
+    {
         $response = Http::withHeaders([
             'X-API-KEY' => $this->key,
             'Content-Type' => 'application/json',
@@ -38,7 +67,7 @@ class SerperService
             throw new \RuntimeException("Serper API error: {$response->status()}");
         }
 
-        return $response->json('organic') ?? [];
+        return $response->json() ?? [];
     }
 
     /** 1-based rank of the first result whose link host matches $domain, or null if not found in the given results. */
