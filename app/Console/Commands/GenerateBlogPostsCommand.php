@@ -174,28 +174,33 @@ class GenerateBlogPostsCommand extends Command
 
     private function generateOne(OpenAiService $ai, array $topic): void
     {
+        // Plain delimited text, NOT response_format=json_object — OpenAI's JSON
+        // mode measurably biased the model toward short, "complete-feeling"
+        // output (tested: 396-625 words against a 1500-word floor, even with
+        // an explicit section-by-section scaffold and a "keep writing" line).
+        // Free-form text generation doesn't have that pull.
         $system = <<<'SYS'
 You are a content writer for EYE Analytics, a privacy-first, cookieless website
 analytics SaaS (heatmaps, session replay, funnels, AI daily reports).
 
-HARD REQUIREMENT — read this first: body_en and body_ar must each be AT LEAST
-1500 words, target 1800-2200. This is the single most important rule in this
-prompt. A short answer is a failed answer, even if well-written — length
-matters as much as quality here. To hit this reliably: write 11-14 sections,
-each 120-180 words, covering (in this rough order) — the core concept and why
-it matters now, the real cost of getting it wrong (concrete scenarios, not
-fake stats), a step-by-step walkthrough a reader can follow today, 3-4 common
-mistakes and how to avoid each one, how to actually measure/verify the
-result, and a short wrap-up. Do not stop early — if you reach a natural
-ending before ~1500 words, go back and add another concrete example, edge
-case, or common mistake instead of concluding.
+HARD REQUIREMENT — read this first: the English and Arabic article bodies
+must each be AT LEAST 1500 words, target 1800-2200. This is the single most
+important rule in this prompt. A short answer is a failed answer, even if
+well-written — length matters as much as quality here. To hit this reliably:
+write 11-14 sections, each 120-180 words, covering (in this rough order) —
+the core concept and why it matters now, the real cost of getting it wrong
+(concrete scenarios, not fake stats), a step-by-step walkthrough a reader can
+follow today, 3-4 common mistakes and how to avoid each one, how to actually
+measure/verify the result, and a short wrap-up. Do not stop early — if you
+reach a natural ending before ~1500 words, go back and add another concrete
+example, edge case, or common mistake instead of concluding.
 
 Write ONE original, useful, well-structured, in-depth blog post in both English
 and Arabic on the given topic. Rules:
-- Plain text only — no markdown, no HTML tags.
+- Plain text only — no markdown, no HTML tags, no headers (no #, no **).
 - Structure as short paragraphs (2-4 sentences), separated by blank lines.
   You may use a line like "Why this matters:" or a short question as a
-  natural paragraph lead-in, but do NOT use markdown headers (no #, no **).
+  natural paragraph lead-in.
 - Cover the topic in real depth: what it means, why it matters, concrete
   step-by-step advice, common mistakes, and how to actually measure/verify
   the result. Anticipate and answer the obvious follow-up questions a reader
@@ -211,19 +216,42 @@ and Arabic on the given topic. Rules:
 - Arabic must be a real translation/adaptation, not transliteration, and
   MUST be equally long and thorough as the English version — not a shortened
   summary of it. Apply the same 1500-word-minimum, 11-14 section structure.
-- Return ONLY a JSON object, no other text, shaped exactly as:
-{"title_en": "...", "title_ar": "...", "excerpt_en": "one sentence, max 160 chars", "excerpt_ar": "...", "body_en": "...", "body_ar": "..."}
-Before returning, check body_en and body_ar are each 1500+ words — if either
-is shorter, keep writing until it isn't.
+
+Output format — plain text, EXACTLY these six lines as markers, each on its
+own line, with the content following the marker line (not on the same line).
+No other text before, between, or after. No markdown fences.
+
+TITLE_EN:
+<English title>
+TITLE_AR:
+<Arabic title>
+EXCERPT_EN:
+<one English sentence, max 160 chars>
+EXCERPT_AR:
+<one Arabic sentence>
+KEYWORDS_EN:
+<5-8 English SEO keywords/phrases SPECIFIC to this article's actual topic
+and angle, comma-separated. Not the same generic list every time — these
+must be different for every article, drawn from what THIS piece actually
+covers (e.g. an article about scroll-depth tracking should list phrases
+like "scroll depth tracking", "how far visitors scroll", not generic terms
+like "website analytics" that could caption any article on this site.>
+KEYWORDS_AR:
+<same 5-8 keywords, translated/localized to Arabic, comma-separated>
+BODY_EN:
+<the full English article body, 1500+ words>
+BODY_AR:
+<the full Arabic article body, 1500+ words>
 SYS;
 
         $user = "Topic: {$topic['angle']}";
 
-        $data = $ai->complete($system, $user, 8192);
+        $result = $ai->chat($system, [['role' => 'user', 'content' => $user]], 8192);
+        $data = $this->parseDelimited($result['text']);
 
         foreach (['title_en', 'title_ar', 'excerpt_en', 'excerpt_ar', 'body_en', 'body_ar'] as $field) {
             if (empty($data[$field])) {
-                throw new \RuntimeException("Anthropic response missing '{$field}'");
+                throw new \RuntimeException("AI response missing '{$field}'");
             }
         }
 
@@ -233,6 +261,8 @@ SYS;
             'title_ar' => $data['title_ar'],
             'excerpt_en' => Str::limit($data['excerpt_en'], 500, ''),
             'excerpt_ar' => Str::limit($data['excerpt_ar'], 500, ''),
+            'keywords_en' => Str::limit($data['keywords_en'] ?? '', 500, ''),
+            'keywords_ar' => Str::limit($data['keywords_ar'] ?? '', 500, ''),
             'body_en' => $data['body_en'],
             'body_ar' => $data['body_ar'],
             'status' => 'published',
@@ -241,6 +271,35 @@ SYS;
             'related_label' => $topic['label_en'],
             'related_label_ar' => $topic['label_ar'],
         ]);
+    }
+
+    /**
+     * Parse the MARKER:\n<content>\n MARKER:... plain-text format back into
+     * a field => value array. Deliberately not JSON — see the comment above
+     * the system prompt for why.
+     */
+    private function parseDelimited(string $text): array
+    {
+        $markers = ['title_en' => 'TITLE_EN:', 'title_ar' => 'TITLE_AR:', 'excerpt_en' => 'EXCERPT_EN:', 'excerpt_ar' => 'EXCERPT_AR:', 'keywords_en' => 'KEYWORDS_EN:', 'keywords_ar' => 'KEYWORDS_AR:', 'body_en' => 'BODY_EN:', 'body_ar' => 'BODY_AR:'];
+
+        $positions = [];
+        foreach ($markers as $field => $marker) {
+            $pos = strpos($text, $marker);
+            if ($pos !== false) {
+                $positions[$field] = $pos;
+            }
+        }
+        asort($positions);
+        $fields = array_keys($positions);
+
+        $data = [];
+        foreach ($fields as $i => $field) {
+            $start = $positions[$field] + strlen($markers[$field]);
+            $end = isset($fields[$i + 1]) ? $positions[$fields[$i + 1]] : strlen($text);
+            $data[$field] = trim(substr($text, $start, $end - $start));
+        }
+
+        return $data;
     }
 
     private function uniqueSlug(string $base): string

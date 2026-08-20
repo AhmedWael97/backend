@@ -9,6 +9,7 @@ class BlogPost extends Model
 {
     protected $fillable = [
         'slug', 'title_en', 'title_ar', 'excerpt_en', 'excerpt_ar',
+        'keywords_en', 'keywords_ar',
         'body_en', 'body_ar', 'cover_image', 'status', 'published_at',
         'related_url', 'related_label', 'related_label_ar',
     ];
