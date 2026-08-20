@@ -172,105 +172,129 @@ class GenerateBlogPostsCommand extends Command
         return $topics;
     }
 
+    /**
+     * Three chained calls instead of one. Tested repeatedly: asking for both
+     * languages (or even one language plus title/excerpt/keywords) in a
+     * single response reliably undershoots — 396-625 words against a
+     * 1500-word floor, regardless of JSON vs plain-text output or how hard
+     * the prompt insists on length. A single call asked to write ONE body in
+     * ONE language hits the target far more reliably; chat models seem to
+     * self-limit total response length per turn more than per-language.
+     */
     private function generateOne(OpenAiService $ai, array $topic): void
     {
-        // Plain delimited text, NOT response_format=json_object — OpenAI's JSON
-        // mode measurably biased the model toward short, "complete-feeling"
-        // output (tested: 396-625 words against a 1500-word floor, even with
-        // an explicit section-by-section scaffold and a "keep writing" line).
-        // Free-form text generation doesn't have that pull.
-        $system = <<<'SYS'
-You are a content writer for EYE Analytics, a privacy-first, cookieless website
-analytics SaaS (heatmaps, session replay, funnels, AI daily reports).
+        $bodyEn = $this->writeBody($ai, $topic['angle'], 'English');
+        $bodyAr = $this->translateBody($ai, $bodyEn, 'Arabic');
+        $meta = $this->writeMeta($ai, $topic['angle'], $bodyEn);
 
-HARD REQUIREMENT — read this first: the English and Arabic article bodies
-must each be AT LEAST 1500 words, target 1800-2200. This is the single most
-important rule in this prompt. A short answer is a failed answer, even if
-well-written — length matters as much as quality here. To hit this reliably:
-write 11-14 sections, each 120-180 words, covering (in this rough order) —
-the core concept and why it matters now, the real cost of getting it wrong
-(concrete scenarios, not fake stats), a step-by-step walkthrough a reader can
-follow today, 3-4 common mistakes and how to avoid each one, how to actually
-measure/verify the result, and a short wrap-up. Do not stop early — if you
-reach a natural ending before ~1500 words, go back and add another concrete
-example, edge case, or common mistake instead of concluding.
-
-Write ONE original, useful, well-structured, in-depth blog post in both English
-and Arabic on the given topic. Rules:
-- Plain text only — no markdown, no HTML tags, no headers (no #, no **).
-- Structure as short paragraphs (2-4 sentences), separated by blank lines.
-  You may use a line like "Why this matters:" or a short question as a
-  natural paragraph lead-in.
-- Cover the topic in real depth: what it means, why it matters, concrete
-  step-by-step advice, common mistakes, and how to actually measure/verify
-  the result. Anticipate and answer the obvious follow-up questions a reader
-  would have, in-line, as part of the natural flow.
-- Educational and practical — explain the concept, give concrete advice a
-  site owner can act on. Do NOT invent statistics, customer names, case
-  studies, or quotes that aren't true. General industry knowledge is fine
-  (e.g. "most bounce happens on mobile") but never fabricate a specific
-  number as if it were EYE's own data.
-- You may mention EYE Analytics naturally two or three times across the piece
-  as an example of a tool that does this, but this is not an ad — the
-  majority of the post must be genuinely useful independent of EYE.
-- Arabic must be a real translation/adaptation, not transliteration, and
-  MUST be equally long and thorough as the English version — not a shortened
-  summary of it. Apply the same 1500-word-minimum, 11-14 section structure.
-
-Output format — plain text, EXACTLY these six lines as markers, each on its
-own line, with the content following the marker line (not on the same line).
-No other text before, between, or after. No markdown fences.
-
-TITLE_EN:
-<English title>
-TITLE_AR:
-<Arabic title>
-EXCERPT_EN:
-<one English sentence, max 160 chars>
-EXCERPT_AR:
-<one Arabic sentence>
-KEYWORDS_EN:
-<5-8 English SEO keywords/phrases SPECIFIC to this article's actual topic
-and angle, comma-separated. Not the same generic list every time — these
-must be different for every article, drawn from what THIS piece actually
-covers (e.g. an article about scroll-depth tracking should list phrases
-like "scroll depth tracking", "how far visitors scroll", not generic terms
-like "website analytics" that could caption any article on this site.>
-KEYWORDS_AR:
-<same 5-8 keywords, translated/localized to Arabic, comma-separated>
-BODY_EN:
-<the full English article body, 1500+ words>
-BODY_AR:
-<the full Arabic article body, 1500+ words>
-SYS;
-
-        $user = "Topic: {$topic['angle']}";
-
-        $result = $ai->chat($system, [['role' => 'user', 'content' => $user]], 8192);
-        $data = $this->parseDelimited($result['text']);
-
-        foreach (['title_en', 'title_ar', 'excerpt_en', 'excerpt_ar', 'body_en', 'body_ar'] as $field) {
-            if (empty($data[$field])) {
+        foreach (['title_en', 'title_ar', 'excerpt_en', 'excerpt_ar'] as $field) {
+            if (empty($meta[$field])) {
                 throw new \RuntimeException("AI response missing '{$field}'");
             }
         }
+        if (str_word_count($bodyEn) < 800 || count(preg_split('/\s+/u', trim($bodyAr))) < 800) {
+            throw new \RuntimeException('Generated body came in too short even after the chained rewrite — skipping rather than publishing thin content.');
+        }
 
         BlogPost::create([
-            'slug' => $this->uniqueSlug($topic['key'] . '-' . $data['title_en']),
-            'title_en' => $data['title_en'],
-            'title_ar' => $data['title_ar'],
-            'excerpt_en' => Str::limit($data['excerpt_en'], 500, ''),
-            'excerpt_ar' => Str::limit($data['excerpt_ar'], 500, ''),
-            'keywords_en' => Str::limit($data['keywords_en'] ?? '', 500, ''),
-            'keywords_ar' => Str::limit($data['keywords_ar'] ?? '', 500, ''),
-            'body_en' => $data['body_en'],
-            'body_ar' => $data['body_ar'],
+            'slug' => $this->uniqueSlug($topic['key'] . '-' . $meta['title_en']),
+            'title_en' => $meta['title_en'],
+            'title_ar' => $meta['title_ar'],
+            'excerpt_en' => Str::limit($meta['excerpt_en'], 500, ''),
+            'excerpt_ar' => Str::limit($meta['excerpt_ar'], 500, ''),
+            'keywords_en' => Str::limit($meta['keywords_en'] ?? '', 500, ''),
+            'keywords_ar' => Str::limit($meta['keywords_ar'] ?? '', 500, ''),
+            'body_en' => $bodyEn,
+            'body_ar' => $bodyAr,
             'status' => 'published',
             'published_at' => now(),
             'related_url' => $topic['link'],
             'related_label' => $topic['label_en'],
             'related_label_ar' => $topic['label_ar'],
         ]);
+    }
+
+    private function writeBody(OpenAiService $ai, string $angle, string $language): string
+    {
+        $system = <<<SYS
+You are a content writer for EYE Analytics, a privacy-first, cookieless website
+analytics SaaS (heatmaps, session replay, funnels, AI daily reports).
+
+Write ONE original, useful, in-depth blog post body in {$language} on the given
+topic. Write AT LEAST 1500 words, target 1800-2200 — this is a hard
+requirement, not a suggestion; a short answer is a failed answer no matter how
+well written. Structure it as 11-14 sections of roughly 120-180 words each,
+covering (in this rough order): the core concept and why it matters now, the
+real cost of getting it wrong (concrete scenarios, not fake stats), a
+step-by-step walkthrough a reader can follow today, 3-4 common mistakes and
+how to avoid each, how to actually measure/verify the result, and a short
+wrap-up. If you reach a natural ending before ~1500 words, do not stop — add
+another concrete example, edge case, or common mistake instead of concluding.
+
+Plain text only — no markdown, no HTML, no headers (no #, no **). Short
+paragraphs (2-4 sentences) separated by blank lines; a line like "Why this
+matters:" or a short question is fine as a paragraph lead-in. Educational and
+practical, with concrete advice a site owner can act on today. Do NOT invent
+statistics, customer names, case studies, or quotes — general industry
+knowledge is fine (e.g. "most bounce happens on mobile") but never fabricate
+a specific number as if it were EYE's own data. You may mention EYE Analytics
+naturally two or three times across the piece as an example of a tool that
+does this, but this is not an ad — the majority must be genuinely useful
+independent of EYE.
+
+Return ONLY the article body text — no title, no preamble, no markers, no
+word count, nothing else.
+SYS;
+
+        $result = $ai->chat($system, [['role' => 'user', 'content' => "Topic: {$angle}"]], 4096);
+        return trim($result['text']);
+    }
+
+    private function translateBody(OpenAiService $ai, string $bodyEn, string $language): string
+    {
+        $system = <<<SYS
+You translate/adapt EYE Analytics blog posts into {$language}. This is a real
+adaptation for {$language}-speaking readers, not a transliteration and not a
+shortened summary — it must be a genuine, fluent, complete {$language} article
+covering everything the English version covers, at the same depth, roughly
+the same word count. Same plain-text formatting rules as the source: no
+markdown, no headers, short paragraphs separated by blank lines.
+
+Return ONLY the translated article body text — no title, no preamble, no
+markers, nothing else.
+SYS;
+
+        $result = $ai->chat($system, [['role' => 'user', 'content' => $bodyEn]], 4096);
+        return trim($result['text']);
+    }
+
+    /** Title/excerpt/keywords generated FROM the finished English body, so they actually describe the real content. */
+    private function writeMeta(OpenAiService $ai, string $angle, string $bodyEn): array
+    {
+        $system = <<<'SYS'
+Given a finished blog post body, write its title, excerpt, and SEO keywords.
+Return PLAIN TEXT, exactly these six lines as markers, each on its own line,
+content following the marker line, nothing else, no markdown fences:
+
+TITLE_EN:
+<English title>
+TITLE_AR:
+<Arabic title>
+EXCERPT_EN:
+<one English sentence, max 160 chars, summarizing this specific article>
+EXCERPT_AR:
+<one Arabic sentence>
+KEYWORDS_EN:
+<5-8 English SEO keywords/phrases SPECIFIC to this article's actual topic,
+comma-separated. Must be different for every article, drawn from what THIS
+piece actually covers — not a generic list that could caption any article>
+KEYWORDS_AR:
+<same 5-8 keywords, translated/localized to Arabic, comma-separated>
+SYS;
+
+        $user = "Topic: {$angle}\n\nArticle body:\n{$bodyEn}";
+        $result = $ai->chat($system, [['role' => 'user', 'content' => $user]], 512);
+        return $this->parseDelimited($result['text']);
     }
 
     /**
