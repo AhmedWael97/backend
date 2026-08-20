@@ -173,17 +173,30 @@ class GenerateBlogPostsCommand extends Command
     }
 
     /**
-     * Three chained calls instead of one. Tested repeatedly: asking for both
-     * languages (or even one language plus title/excerpt/keywords) in a
-     * single response reliably undershoots — 396-625 words against a
-     * 1500-word floor, regardless of JSON vs plain-text output or how hard
-     * the prompt insists on length. A single call asked to write ONE body in
-     * ONE language hits the target far more reliably; chat models seem to
-     * self-limit total response length per turn more than per-language.
+     * Outline + one call per section, concatenated — instead of asking for
+     * the whole 1500+ word body in one completion. Tested repeatedly and a
+     * single call will NOT reliably hit that length no matter how the prompt
+     * is written: JSON mode landed 396-625 words, plain-text single-call
+     * landed 583, plain-text single-language-only landed 745 — and that last
+     * one used only 1340 of its 4096 token budget and ended on a clean,
+     * natural concluding sentence. It wasn't truncating, it was choosing to
+     * stop. Only genuine multi-call chaining reliably produces long-form
+     * content from this model: each section call only has to write ~150-200
+     * words, which it will actually do.
      */
     private function generateOne(OpenAiService $ai, array $topic): void
     {
-        $bodyEn = $this->writeBody($ai, $topic['angle'], 'English');
+        $outline = $this->writeOutline($ai, $topic['angle']);
+        if (count($outline) < 6) {
+            throw new \RuntimeException('Outline came back too short (' . count($outline) . ' sections) — skipping.');
+        }
+
+        $sections = [];
+        foreach ($outline as $i => $brief) {
+            $sections[] = $this->writeSection($ai, $topic['angle'], $outline, $i, $brief);
+        }
+        $bodyEn = trim(implode("\n\n", array_filter($sections)));
+
         $bodyAr = $this->translateBody($ai, $bodyEn, 'Arabic');
         $meta = $this->writeMeta($ai, $topic['angle'], $bodyEn);
 
@@ -192,8 +205,8 @@ class GenerateBlogPostsCommand extends Command
                 throw new \RuntimeException("AI response missing '{$field}'");
             }
         }
-        if (str_word_count($bodyEn) < 800 || count(preg_split('/\s+/u', trim($bodyAr))) < 800) {
-            throw new \RuntimeException('Generated body came in too short even after the chained rewrite — skipping rather than publishing thin content.');
+        if (str_word_count($bodyEn) < 1200 || count(preg_split('/\s+/u', trim($bodyAr))) < 1200) {
+            throw new \RuntimeException('Generated body came in too short even after section-by-section chaining (' . str_word_count($bodyEn) . ' EN words) — skipping rather than publishing thin content.');
         }
 
         BlogPost::create([
@@ -214,39 +227,58 @@ class GenerateBlogPostsCommand extends Command
         ]);
     }
 
-    private function writeBody(OpenAiService $ai, string $angle, string $language): string
+    /** @return array<int, string> 8-10 short section briefs, one line each. */
+    private function writeOutline(OpenAiService $ai, string $angle): array
     {
-        $system = <<<SYS
-You are a content writer for EYE Analytics, a privacy-first, cookieless website
-analytics SaaS (heatmaps, session replay, funnels, AI daily reports).
+        $system = <<<'SYS'
+You are planning an in-depth blog post for EYE Analytics, a privacy-first,
+cookieless website analytics SaaS. Given a topic, output an outline of 8-10
+sections that together would make a genuinely thorough ~1800-2200 word
+article — not a shallow overview. Good coverage usually includes: the core
+concept and why it matters now, the real cost of getting it wrong (concrete
+scenarios), a step-by-step walkthrough, 3-4 distinct common mistakes as
+SEPARATE sections (not lumped into one), how to measure/verify the result,
+and a wrap-up — but adapt this to whatever actually fits the topic.
 
-Write ONE original, useful, in-depth blog post body in {$language} on the given
-topic. Write AT LEAST 1500 words, target 1800-2200 — this is a hard
-requirement, not a suggestion; a short answer is a failed answer no matter how
-well written. Structure it as 11-14 sections of roughly 120-180 words each,
-covering (in this rough order): the core concept and why it matters now, the
-real cost of getting it wrong (concrete scenarios, not fake stats), a
-step-by-step walkthrough a reader can follow today, 3-4 common mistakes and
-how to avoid each, how to actually measure/verify the result, and a short
-wrap-up. If you reach a natural ending before ~1500 words, do not stop — add
-another concrete example, edge case, or common mistake instead of concluding.
-
-Plain text only — no markdown, no HTML, no headers (no #, no **). Short
-paragraphs (2-4 sentences) separated by blank lines; a line like "Why this
-matters:" or a short question is fine as a paragraph lead-in. Educational and
-practical, with concrete advice a site owner can act on today. Do NOT invent
-statistics, customer names, case studies, or quotes — general industry
-knowledge is fine (e.g. "most bounce happens on mobile") but never fabricate
-a specific number as if it were EYE's own data. You may mention EYE Analytics
-naturally two or three times across the piece as an example of a tool that
-does this, but this is not an ad — the majority must be genuinely useful
-independent of EYE.
-
-Return ONLY the article body text — no title, no preamble, no markers, no
-word count, nothing else.
+Return ONLY a numbered list, one section per line, each line a one-sentence
+brief of what that section covers (not just a title). No other text.
 SYS;
 
-        $result = $ai->chat($system, [['role' => 'user', 'content' => "Topic: {$angle}"]], 4096);
+        $result = $ai->chat($system, [['role' => 'user', 'content' => "Topic: {$angle}"]], 512);
+        $lines = preg_split('/\r?\n/', trim($result['text']));
+        $sections = [];
+        foreach ($lines as $line) {
+            $clean = trim(preg_replace('/^\s*\d+[.\)]\s*/', '', $line));
+            if ($clean !== '') {
+                $sections[] = $clean;
+            }
+        }
+        return $sections;
+    }
+
+    /** @param array<int, string> $outline */
+    private function writeSection(OpenAiService $ai, string $angle, array $outline, int $index, string $brief): string
+    {
+        $system = <<<'SYS'
+You are writing ONE section of a longer EYE Analytics blog post (the other
+sections are written separately — do not introduce the article, do not
+summarize/conclude the whole piece, and do not repeat what other sections
+already cover per the outline below). Write 150-220 words for JUST this
+section, plain text, no markdown, no headers, 1-3 short paragraphs (2-4
+sentences each). Educational and practical, concrete advice a site owner can
+act on. Do NOT invent statistics, customer names, or quotes — general
+industry knowledge is fine but never fabricate a specific number as EYE's own
+data. You may mention EYE Analytics naturally if directly relevant to this
+specific section, but don't force it into every section.
+
+Return ONLY this section's body text — no heading, no section number, no
+preamble.
+SYS;
+
+        $outlineText = implode("\n", array_map(fn ($s, $i) => ($i + 1) . '. ' . $s, $outline, array_keys($outline)));
+        $user = "Article topic: {$angle}\n\nFull outline (for context — write ONLY section " . ($index + 1) . "):\n{$outlineText}\n\nWrite section " . ($index + 1) . ": {$brief}";
+
+        $result = $ai->chat($system, [['role' => 'user', 'content' => $user]], 512);
         return trim($result['text']);
     }
 
