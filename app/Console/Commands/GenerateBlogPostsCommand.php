@@ -3,7 +3,7 @@
 namespace App\Console\Commands;
 
 use App\Models\BlogPost;
-use App\Services\AnthropicService;
+use App\Services\OpenAiService;
 use App\Services\SerperService;
 use Illuminate\Console\Command;
 use Illuminate\Support\Str;
@@ -69,7 +69,7 @@ class GenerateBlogPostsCommand extends Command
         'split test' => ['link' => '/all-in-one', 'label_en' => 'See A/B testing in EYE', 'label_ar' => 'شاهد اختبارات A/B في EYE'],
     ];
 
-    public function handle(AnthropicService $ai, SerperService $serper): int
+    public function handle(OpenAiService $ai, SerperService $serper): int
     {
         $count = max(1, (int) $this->option('count'));
 
@@ -172,7 +172,7 @@ class GenerateBlogPostsCommand extends Command
         return $topics;
     }
 
-    private function generateOne(AnthropicService $ai, array $topic): void
+    private function generateOne(OpenAiService $ai, array $topic): void
     {
         $system = <<<'SYS'
 You are a content writer for EYE Analytics, a privacy-first, cookieless website
