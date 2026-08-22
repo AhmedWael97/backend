@@ -110,7 +110,10 @@ class GenerateBlogPostsCommand extends Command
         }
 
         $this->info("Published {$ok}/{$count} blog post(s).");
-        return self::SUCCESS;
+        // Every topic failing (e.g. a dead/revoked API key) must not look like
+        // a clean run to the scheduler — this exact silent-success bug is why
+        // a real key outage went unnoticed at today's 06:00 run.
+        return $ok > 0 ? self::SUCCESS : self::FAILURE;
     }
 
     /**

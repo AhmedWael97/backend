@@ -35,7 +35,7 @@ Schedule::command('eye:cleanup-stale-domains')->dailyAt('03:30');
 // SEO content: 4 posts/day (1500-2200 words each), topics from a curated
 // rotation + real Serper keyword research, each with one guaranteed-valid
 // internal link (see command for the topic->URL map / discovery logic).
-Schedule::command('eye:generate-blog-posts --count=4')->dailyAt('06:00');
+Schedule::command('eye:generate-blog-posts --count=4')->dailyAt('06:00')->emailOutputOnFailure('info@senueg.com');
 // Real Google positions for every tracked keyword, via Serper.dev (no-ops if SERPER_API_KEY unset).
 Schedule::command('eye:fetch-seo-rankings')->dailyAt('05:00');
 // AI-visibility tracking: does EYE get mentioned when Claude answers real buyer questions. Slow-moving signal, weekly is enough.
