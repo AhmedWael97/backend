@@ -42,7 +42,17 @@ class GeminiService
                 ->withHeaders(['x-goog-api-key' => $this->key])
                 ->post($url . '?key=' . urlencode($this->key), [
                     'contents' => [['parts' => [['text' => $prompt]]]],
-                    'generationConfig' => ['temperature' => 0.4, 'maxOutputTokens' => $maxTokens],
+                    // thinkingBudget: 0 disables Gemini 2.5's internal reasoning step.
+                    // Without this, "thoughts" silently ate the large majority of
+                    // maxOutputTokens (confirmed: 339 of 512 on a plain list-facts
+                    // prompt) before any visible text was written, so short calls
+                    // hit MAX_TOKENS almost immediately with barely any real output.
+                    // Not needed for this kind of direct content-writing task.
+                    'generationConfig' => [
+                        'temperature' => 0.4,
+                        'maxOutputTokens' => $maxTokens,
+                        'thinkingConfig' => ['thinkingBudget' => 0],
+                    ],
                 ]);
             if ($res->failed()) {
                 $this->lastStatus = $res->status();
