@@ -346,10 +346,23 @@ SYS;
         return $this->parseDelimited($text);
     }
 
-    /** Calls GeminiService::generate() and throws instead of silently returning empty on failure (unconfigured key, quota, network error, etc). */
+    /**
+     * Calls GeminiService::generate() and throws instead of silently
+     * returning empty on failure. A full post is ~22 Gemini calls (outline +
+     * per-section write + per-section translate + meta) — comfortably over
+     * the free tier's per-minute rate limit if fired back to back (confirmed
+     * live: 429 on the very next post after a burst of manual test calls).
+     * Paces every call and retries once, longer, specifically on 429.
+     */
     private function generateOrFail(GeminiService $ai, string $prompt, int $maxTokens): string
     {
+        usleep(4_500_000); // ~13 req/min, under the free-tier ceiling
+
         $text = $ai->generate($prompt, $maxTokens);
+        if ($text === null && $ai->lastStatus === 429) {
+            sleep(20);
+            $text = $ai->generate($prompt, $maxTokens);
+        }
         if ($text === null || trim($text) === '') {
             throw new \RuntimeException('Gemini returned no content (status: ' . ($ai->lastStatus ?? 'n/a') . ')');
         }
