@@ -3,7 +3,7 @@
 namespace App\Console\Commands;
 
 use App\Models\AiVisibilityCheck;
-use App\Services\OpenAiService;
+use App\Services\GeminiService;
 use Illuminate\Console\Command;
 
 /**
@@ -12,10 +12,11 @@ use Illuminate\Console\Command;
  * and records whether EYE comes up organically in the answer. Same idea as
  * classic SEO rank tracking, but for AI answer engines instead of Google.
  *
- * Currently checks ChatGPT (OpenAiService) only — that's the provider with a
- * working key; ANTHROPIC_API_KEY is unset in production. Checking Claude/
- * Perplexity too is just another client + one more loop iteration once keys
- * exist.
+ * Currently checks Gemini only — OPENAI_API_KEY was invalidated externally
+ * (rotated/revoked, unrelated to our code) and ANTHROPIC_API_KEY is unset;
+ * GEMINI_API_KEY is the one provider with a real, working, free-tier key.
+ * Checking ChatGPT/Claude/Perplexity too is just another client + one more
+ * loop iteration once those keys exist again.
  */
 class CheckAiVisibilityCommand extends Command
 {
@@ -35,20 +36,23 @@ class CheckAiVisibilityCommand extends Command
 
     private const SYSTEM = 'You are a helpful assistant. Answer the question directly and practically, recommending specific real tools/products by name where relevant, as if a business owner asked you for advice.';
 
-    public function handle(OpenAiService $ai): int
+    public function handle(GeminiService $ai): int
     {
         $ok = 0;
 
         foreach (self::QUERIES as $query) {
             try {
-                $result = $ai->chat(self::SYSTEM, [['role' => 'user', 'content' => $query]], 1024);
-                $answer = $result['text'];
+                $answer = $ai->generate(self::SYSTEM . "\n\n" . $query, 1024);
+                if ($answer === null || trim($answer) === '') {
+                    throw new \RuntimeException('Gemini returned no content (status: ' . ($ai->lastStatus ?? 'n/a') . ')');
+                }
+
                 $mentioned = str_contains(strtolower($answer), 'eye analytics')
                     || str_contains(strtolower($answer), 'eye-analysis.online');
 
                 AiVisibilityCheck::create([
                     'query' => $query,
-                    'engine' => 'openai',
+                    'engine' => 'gemini',
                     'mentioned' => $mentioned,
                     'answer' => $answer,
                     'checked_at' => now(),
@@ -61,6 +65,8 @@ class CheckAiVisibilityCommand extends Command
         }
 
         $this->info("Checked {$ok}/" . count(self::QUERIES) . ' quer' . (count(self::QUERIES) === 1 ? 'y' : 'ies') . '.');
-        return self::SUCCESS;
+        // Every query failing must not look like a clean run — same fix as
+        // the blog-post generator, same underlying lesson.
+        return $ok > 0 ? self::SUCCESS : self::FAILURE;
     }
 }

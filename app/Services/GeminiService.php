@@ -30,7 +30,7 @@ class GeminiService
     }
 
     /** Return generated text, or null on any failure. */
-    public function generate(string $prompt): ?string
+    public function generate(string $prompt, int $maxTokens = 800): ?string
     {
         $this->lastStatus = null;
         if (!$this->configured()) {
@@ -42,7 +42,7 @@ class GeminiService
                 ->withHeaders(['x-goog-api-key' => $this->key])
                 ->post($url . '?key=' . urlencode($this->key), [
                     'contents' => [['parts' => [['text' => $prompt]]]],
-                    'generationConfig' => ['temperature' => 0.4, 'maxOutputTokens' => 800],
+                    'generationConfig' => ['temperature' => 0.4, 'maxOutputTokens' => $maxTokens],
                 ]);
             if ($res->failed()) {
                 $this->lastStatus = $res->status();

@@ -38,5 +38,5 @@ Schedule::command('eye:cleanup-stale-domains')->dailyAt('03:30');
 Schedule::command('eye:generate-blog-posts --count=4')->dailyAt('06:00')->emailOutputOnFailure('info@senueg.com');
 // Real Google positions for every tracked keyword, via Serper.dev (no-ops if SERPER_API_KEY unset).
 Schedule::command('eye:fetch-seo-rankings')->dailyAt('05:00');
-// AI-visibility tracking: does EYE get mentioned when Claude answers real buyer questions. Slow-moving signal, weekly is enough.
-Schedule::command('eye:check-ai-visibility')->weeklyOn(1, '07:00');
+// AI-visibility tracking: does EYE get mentioned when Gemini answers real buyer questions. Slow-moving signal, weekly is enough.
+Schedule::command('eye:check-ai-visibility')->weeklyOn(1, '07:00')->emailOutputOnFailure('info@senueg.com');
