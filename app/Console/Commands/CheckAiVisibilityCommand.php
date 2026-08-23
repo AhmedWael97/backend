@@ -3,7 +3,7 @@
 namespace App\Console\Commands;
 
 use App\Models\AiVisibilityCheck;
-use App\Services\GeminiService;
+use App\Services\OpenAiService;
 use Illuminate\Console\Command;
 
 /**
@@ -12,11 +12,12 @@ use Illuminate\Console\Command;
  * and records whether EYE comes up organically in the answer. Same idea as
  * classic SEO rank tracking, but for AI answer engines instead of Google.
  *
- * Currently checks Gemini only — OPENAI_API_KEY was invalidated externally
- * (rotated/revoked, unrelated to our code) and ANTHROPIC_API_KEY is unset;
- * GEMINI_API_KEY is the one provider with a real, working, free-tier key.
- * Checking ChatGPT/Claude/Perplexity too is just another client + one more
- * loop iteration once those keys exist again.
+ * Currently checks ChatGPT (OpenAiService) only — that's the provider with a
+ * working key; ANTHROPIC_API_KEY is unset in production, and Gemini's free
+ * tier caps at 20 requests/day per model (shared with FormsController's real
+ * customer traffic), too tight to spend on this too. Checking Claude/
+ * Gemini/Perplexity as well is just another client + one more loop iteration
+ * once that's worth the quota/cost.
  */
 class CheckAiVisibilityCommand extends Command
 {
@@ -36,23 +37,20 @@ class CheckAiVisibilityCommand extends Command
 
     private const SYSTEM = 'You are a helpful assistant. Answer the question directly and practically, recommending specific real tools/products by name where relevant, as if a business owner asked you for advice.';
 
-    public function handle(GeminiService $ai): int
+    public function handle(OpenAiService $ai): int
     {
         $ok = 0;
 
         foreach (self::QUERIES as $query) {
             try {
-                $answer = $ai->generate(self::SYSTEM . "\n\n" . $query, 1024);
-                if ($answer === null || trim($answer) === '') {
-                    throw new \RuntimeException('Gemini returned no content (status: ' . ($ai->lastStatus ?? 'n/a') . ')');
-                }
-
+                $result = $ai->chat(self::SYSTEM, [['role' => 'user', 'content' => $query]], 1024);
+                $answer = $result['text'];
                 $mentioned = str_contains(strtolower($answer), 'eye analytics')
                     || str_contains(strtolower($answer), 'eye-analysis.online');
 
                 AiVisibilityCheck::create([
                     'query' => $query,
-                    'engine' => 'gemini',
+                    'engine' => 'openai',
                     'mentioned' => $mentioned,
                     'answer' => $answer,
                     'checked_at' => now(),

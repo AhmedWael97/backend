@@ -3,7 +3,7 @@
 namespace App\Console\Commands;
 
 use App\Models\BlogPost;
-use App\Services\GeminiService;
+use App\Services\OpenAiService;
 use App\Services\SerperService;
 use Illuminate\Console\Command;
 use Illuminate\Support\Str;
@@ -69,7 +69,7 @@ class GenerateBlogPostsCommand extends Command
         'split test' => ['link' => '/all-in-one', 'label_en' => 'See A/B testing in EYE', 'label_ar' => 'شاهد اختبارات A/B في EYE'],
     ];
 
-    public function handle(GeminiService $ai, SerperService $serper): int
+    public function handle(OpenAiService $ai, SerperService $serper): int
     {
         $count = max(1, (int) $this->option('count'));
 
@@ -185,27 +185,24 @@ class GenerateBlogPostsCommand extends Command
      * natural concluding sentence. It wasn't truncating, it was choosing to
      * stop. Only genuine multi-call chaining reliably produces long-form
      * content from this model: each section call only has to write ~150-200
-     * words, which it will actually do.
+     * words, which it will actually do. (Briefly ran this on Gemini's free
+     * tier when OPENAI_API_KEY was dead — real key is back, reverted to
+     * OpenAI: Gemini's free tier caps at 20 requests/DAY per model, nowhere
+     * near enough for ~22 calls/post at this volume.)
      */
-    private function generateOne(GeminiService $ai, array $topic): void
+    private function generateOne(OpenAiService $ai, array $topic): void
     {
         $outline = $this->writeOutline($ai, $topic['angle']);
         if (count($outline) < 6) {
             throw new \RuntimeException('Outline came back too short (' . count($outline) . ' sections) — skipping.');
         }
 
-        $sectionsEn = [];
-        $sectionsAr = [];
+        $sections = [];
         foreach ($outline as $i => $brief) {
-            $sectionEn = $this->writeSection($ai, $topic['angle'], $outline, $i, $brief);
-            $sectionsEn[] = $sectionEn;
-            // Translate per-section, not the whole finished body in one call —
-            // Gemini's free-tier output cap (800 tokens) can't fit a full
-            // ~2000-word translation in one shot, but easily fits one section.
-            $sectionsAr[] = $this->translateSection($ai, $sectionEn, 'Arabic');
+            $sections[] = $this->writeSection($ai, $topic['angle'], $outline, $i, $brief);
         }
-        $bodyEn = trim(implode("\n\n", array_filter($sectionsEn)));
-        $bodyAr = trim(implode("\n\n", array_filter($sectionsAr)));
+        $bodyEn = trim(implode("\n\n", array_filter($sections)));
+        $bodyAr = $this->translateBody($ai, $bodyEn, 'Arabic');
 
         $meta = $this->writeMeta($ai, $topic['angle'], $bodyEn);
 
@@ -237,9 +234,9 @@ class GenerateBlogPostsCommand extends Command
     }
 
     /** @return array<int, string> 8-10 short section briefs, one line each. */
-    private function writeOutline(GeminiService $ai, string $angle): array
+    private function writeOutline(OpenAiService $ai, string $angle): array
     {
-        $prompt = <<<SYS
+        $system = <<<'SYS'
 You are planning an in-depth blog post for EYE Analytics, a privacy-first,
 cookieless website analytics SaaS. Given a topic, output an outline of 8-10
 sections that together would make a genuinely thorough ~1800-2200 word
@@ -251,12 +248,10 @@ and a wrap-up — but adapt this to whatever actually fits the topic.
 
 Return ONLY a numbered list, one section per line, each line a one-sentence
 brief of what that section covers (not just a title). No other text.
-
-Topic: {$angle}
 SYS;
 
-        $text = $this->generateOrFail($ai, $prompt, 512);
-        $lines = preg_split('/\r?\n/', trim($text));
+        $result = $ai->chat($system, [['role' => 'user', 'content' => "Topic: {$angle}"]], 512);
+        $lines = preg_split('/\r?\n/', trim($result['text']));
         $sections = [];
         foreach ($lines as $line) {
             $clean = trim(preg_replace('/^\s*\d+[.\)]\s*/', '', $line));
@@ -268,11 +263,9 @@ SYS;
     }
 
     /** @param array<int, string> $outline */
-    private function writeSection(GeminiService $ai, string $angle, array $outline, int $index, string $brief): string
+    private function writeSection(OpenAiService $ai, string $angle, array $outline, int $index, string $brief): string
     {
-        $outlineText = implode("\n", array_map(fn ($s, $i) => ($i + 1) . '. ' . $s, $outline, array_keys($outline)));
-        $sectionNum = $index + 1;
-        $prompt = <<<SYS
+        $system = <<<'SYS'
 You are writing ONE section of a longer EYE Analytics blog post (the other
 sections are written separately — do not introduce the article, do not
 summarize/conclude the whole piece, and do not repeat what other sections
@@ -286,41 +279,38 @@ specific section, but don't force it into every section.
 
 Return ONLY this section's body text — no heading, no section number, no
 preamble.
-
-Article topic: {$angle}
-
-Full outline (for context — write ONLY section {$sectionNum}):
-{$outlineText}
-
-Write section {$sectionNum}: {$brief}
 SYS;
 
-        return $this->generateOrFail($ai, $prompt, 512);
+        $outlineText = implode("\n", array_map(fn ($s, $i) => ($i + 1) . '. ' . $s, $outline, array_keys($outline)));
+        $sectionNum = $index + 1;
+        $user = "Article topic: {$angle}\n\nFull outline (for context — write ONLY section {$sectionNum}):\n{$outlineText}\n\nWrite section {$sectionNum}: {$brief}";
+
+        $result = $ai->chat($system, [['role' => 'user', 'content' => $user]], 512);
+        return trim($result['text']);
     }
 
-    /** Translate a single already-written section — not the whole body in one call, see class doc comment for why. */
-    private function translateSection(GeminiService $ai, string $sectionEn, string $language): string
+    private function translateBody(OpenAiService $ai, string $bodyEn, string $language): string
     {
-        $prompt = <<<SYS
-Translate/adapt this one section of an EYE Analytics blog post into
-{$language}. Real adaptation for {$language}-speaking readers, not a
-transliteration and not a shortened summary — genuine, fluent, complete,
-same depth and roughly the same length as the source. Plain text, no
-markdown, no headers.
+        $system = <<<SYS
+You translate/adapt EYE Analytics blog posts into {$language}. This is a real
+adaptation for {$language}-speaking readers, not a transliteration and not a
+shortened summary — it must be a genuine, fluent, complete {$language} article
+covering everything the English version covers, at the same depth, roughly
+the same word count. Same plain-text formatting rules as the source: no
+markdown, no headers, short paragraphs separated by blank lines.
 
-Return ONLY the translated text — no preamble, no markers, nothing else.
-
-Section text:
-{$sectionEn}
+Return ONLY the translated article body text — no title, no preamble, no
+markers, nothing else.
 SYS;
 
-        return $this->generateOrFail($ai, $prompt, 512);
+        $result = $ai->chat($system, [['role' => 'user', 'content' => $bodyEn]], 4096);
+        return trim($result['text']);
     }
 
     /** Title/excerpt/keywords generated FROM the finished English body, so they actually describe the real content. */
-    private function writeMeta(GeminiService $ai, string $angle, string $bodyEn): array
+    private function writeMeta(OpenAiService $ai, string $angle, string $bodyEn): array
     {
-        $prompt = <<<'SYS'
+        $system = <<<'SYS'
 Given a finished blog post body, write its title, excerpt, and SEO keywords.
 Return PLAIN TEXT, exactly these six lines as markers, each on its own line,
 content following the marker line, nothing else, no markdown fences:
@@ -341,32 +331,9 @@ KEYWORDS_AR:
 <same 5-8 keywords, translated/localized to Arabic, comma-separated>
 SYS;
 
-        $prompt .= "\n\nTopic: {$angle}\n\nArticle body:\n{$bodyEn}";
-        $text = $this->generateOrFail($ai, $prompt, 512);
-        return $this->parseDelimited($text);
-    }
-
-    /**
-     * Calls GeminiService::generate() and throws instead of silently
-     * returning empty on failure. A full post is ~22 Gemini calls (outline +
-     * per-section write + per-section translate + meta) — comfortably over
-     * the free tier's per-minute rate limit if fired back to back (confirmed
-     * live: 429 on the very next post after a burst of manual test calls).
-     * Paces every call and retries once, longer, specifically on 429.
-     */
-    private function generateOrFail(GeminiService $ai, string $prompt, int $maxTokens): string
-    {
-        usleep(4_500_000); // ~13 req/min, under the free-tier ceiling
-
-        $text = $ai->generate($prompt, $maxTokens);
-        if ($text === null && $ai->lastStatus === 429) {
-            sleep(20);
-            $text = $ai->generate($prompt, $maxTokens);
-        }
-        if ($text === null || trim($text) === '') {
-            throw new \RuntimeException('Gemini returned no content (status: ' . ($ai->lastStatus ?? 'n/a') . ')');
-        }
-        return trim($text);
+        $user = "Topic: {$angle}\n\nArticle body:\n{$bodyEn}";
+        $result = $ai->chat($system, [['role' => 'user', 'content' => $user]], 512);
+        return $this->parseDelimited($result['text']);
     }
 
     /**
