@@ -129,7 +129,7 @@ class OutreachController extends Controller
 
         $token = Str::random(40);
         $unsubUrl = url("/api/v1/outreach/unsubscribe/{$token}");
-        $bodyHtml = OutreachRenderer::html($data['body'], $unsubUrl);
+        $bodyHtml = OutreachRenderer::html($data['body'], $unsubUrl, $draft?->meta);
 
         $status = 'sent';
         try {

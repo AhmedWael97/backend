@@ -109,7 +109,7 @@ class SendOutreachCommand extends Command
             }
 
             $token = $draft->unsubscribe_token ?: Str::random(40);
-            $html = OutreachRenderer::html((string) $draft->body, url("/api/v1/outreach/unsubscribe/{$token}"));
+            $html = OutreachRenderer::html((string) $draft->body, url("/api/v1/outreach/unsubscribe/{$token}"), $draft->meta);
 
             try {
                 Mail::html($html, function ($m) use ($to, $draft) {

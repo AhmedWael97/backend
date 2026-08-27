@@ -8,12 +8,12 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 class OutreachEmail extends Model
 {
     protected $fillable = [
-        'user_id', 'lead_id', 'to_email', 'subject', 'body', 'status', 'unsubscribe_token', 'sent_at',
+        'user_id', 'lead_id', 'to_email', 'subject', 'body', 'meta', 'status', 'unsubscribe_token', 'sent_at',
     ];
 
     protected function casts(): array
     {
-        return ['sent_at' => 'datetime'];
+        return ['sent_at' => 'datetime', 'meta' => 'array'];
     }
 
     public function lead(): BelongsTo

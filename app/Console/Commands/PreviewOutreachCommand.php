@@ -58,7 +58,7 @@ class PreviewOutreachCommand extends Command
         $this->newLine();
 
         $unsubUrl = url("/api/v1/outreach/unsubscribe/{$draft->unsubscribe_token}");
-        $html = OutreachRenderer::html((string) $draft->body, $unsubUrl);
+        $html = OutreachRenderer::html((string) $draft->body, $unsubUrl, $draft->meta);
 
         try {
             Mail::html($html, function ($m) use ($to, $draft) {

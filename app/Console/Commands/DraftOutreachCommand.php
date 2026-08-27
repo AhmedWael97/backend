@@ -107,6 +107,23 @@ class DraftOutreachCommand extends Command
 
             $issues = array_slice($audit['issues'], 0, 4);
             [$subject, $body] = $this->compose($ai, $lead, $audit, $issues);
+            $host = (string) parse_url($this->normalizeUrl((string) $lead->website), PHP_URL_HOST);
+
+            // The same content the body carries, kept structured so the renderer
+            // can lay it out as a designed email rather than nl2br over prose.
+            $meta = [
+                'host' => $host,
+                'score' => (int) $audit['score'],
+                'issue_count' => count($audit['issues']),
+                'issues' => array_map(fn (array $i) => [
+                    'label' => (string) ($i['label'] ?? ''),
+                    'message' => (string) ($i['message'] ?? ''),
+                    'suggestion' => (string) ($i['suggestion'] ?? ''),
+                    'severity' => (string) ($i['severity'] ?? ''),
+                ], $issues),
+                'scan_url' => $this->scanUrl(),
+                'pricing' => $this->pricingLine(),
+            ];
 
             $this->line(sprintf(
                 '  <fg=green>ok</> %-34s score %-3d %d issues',
@@ -127,6 +144,7 @@ class DraftOutreachCommand extends Command
                 'to_email' => $lead->email,
                 'subject' => mb_substr($subject, 0, 255),
                 'body' => $body,
+                'meta' => $meta,
                 'status' => 'draft',
                 'unsubscribe_token' => Str::random(40),
             ]);
