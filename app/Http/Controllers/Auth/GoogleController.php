@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Auth;
 
+use App\Http\Controllers\Auth\Concerns\CapturesAcquisition;
 use App\Http\Controllers\Controller;
 use App\Models\OrganizationInvitation;
 use App\Models\OrganizationMember;
@@ -16,6 +17,8 @@ use Laravel\Socialite\Facades\Socialite;
 
 class GoogleController extends Controller
 {
+    use CapturesAcquisition;
+
     public function redirect(Request $request)
     {
         $redirect = $request->input('redirect') ?: config('app.frontend_url') . '/en/auth/callback';
@@ -52,11 +55,16 @@ class GoogleController extends Controller
         }
 
         if (!$user) {
-            // The referral code (if any) rides inside the redirect URL's own
-            // query string — it was appended client-side before starting the
-            // OAuth trip, so it survives the round-trip through `state` untouched.
+            // The referral code and the first-touch utm/click-id (if any) ride
+            // inside the redirect URL's own query string — appended client-side
+            // before starting the OAuth trip, so they survive the round-trip
+            // through `state` untouched.
             parse_str((string) parse_url($redirect, PHP_URL_QUERY), $redirectParams);
-            $user = $this->createUserFromGoogle($googleUser, $redirectParams['ref'] ?? null);
+            $user = $this->createUserFromGoogle(
+                $googleUser,
+                $redirectParams['ref'] ?? null,
+                $this->acquisitionAttributes($redirectParams)
+            );
         } elseif (!$user->google_id) {
             $user->google_id = $googleId;
             $user->save();
@@ -110,7 +118,13 @@ class GoogleController extends Controller
             return $this->error('Your account is suspended.', 403);
         }
         if (!$user) {
-            $user = $this->createGoogleUser($googleId, $email, $p['name'] ?? null, $request->input('referral_code'));
+            $user = $this->createGoogleUser(
+                $googleId,
+                $email,
+                $p['name'] ?? null,
+                $request->input('referral_code'),
+                $this->acquisitionAttributes($request->all())
+            );
         } elseif (!$user->google_id) {
             $user->google_id = $googleId;
             $user->save();
@@ -124,18 +138,24 @@ class GoogleController extends Controller
         return $this->success(['token' => $token, 'user' => $user->fresh()]);
     }
 
-    private function createUserFromGoogle($googleUser, ?string $referralCode = null): User
+    private function createUserFromGoogle($googleUser, ?string $referralCode = null, array $acquisition = []): User
     {
         return $this->createGoogleUser(
             $googleUser->getId(),
             $googleUser->getEmail(),
             $googleUser->getName(),
-            $referralCode
+            $referralCode,
+            $acquisition
         );
     }
 
-    private function createGoogleUser(string $googleId, string $email, ?string $name, ?string $referralCode = null): User
-    {
+    private function createGoogleUser(
+        string $googleId,
+        string $email,
+        ?string $name,
+        ?string $referralCode = null,
+        array $acquisition = []
+    ): User {
         $name = $name ?: ucfirst(explode('@', $email)[0]);
 
         $user = User::create([
@@ -150,7 +170,7 @@ class GoogleController extends Controller
             'role' => 'user',
             'status' => 'active',
             'referral_code' => User::generateReferralCode(),
-        ]);
+        ] + $acquisition);
 
         Referral::maybeCreate($referralCode, $user);
         $this->createTrialSubscription($user);

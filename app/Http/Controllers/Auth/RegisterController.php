@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Auth;
 
+use App\Http\Controllers\Auth\Concerns\CapturesAcquisition;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Auth\RegisterRequest;
 use App\Models\Plan;
@@ -15,6 +16,8 @@ use Illuminate\Support\Str;
 
 class RegisterController extends Controller
 {
+    use CapturesAcquisition;
+
     public function __construct(private readonly TikTokEventsService $tiktok)
     {
     }
@@ -59,11 +62,7 @@ class RegisterController extends Controller
             // middleware sets on first landing (see middleware.ts) — lets us
             // trace a registered user back to the ad session that brought them,
             // which ClickHouse's post-login visitor_id alone cannot do.
-            'signup_utm_source' => $request->input('utm_source'),
-            'signup_utm_medium' => $request->input('utm_medium'),
-            'signup_utm_campaign' => $request->input('utm_campaign'),
-            'signup_click_id' => $request->input('click_id'),
-        ]);
+        ] + $this->acquisitionAttributes($request->all()));
 
         Referral::maybeCreate($request->input('referral_code'), $user);
 

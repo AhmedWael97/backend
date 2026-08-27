@@ -3,14 +3,18 @@
 namespace App\Http\Controllers\Domain;
 
 use App\Http\Controllers\Controller;
+use App\Http\Controllers\EmailController;
 use App\Http\Requests\Domain\StoreExclusionRequest;
 use App\Http\Requests\Domain\StoreDomainRequest;
 use App\Http\Requests\Domain\UpdateDomainRequest;
 use App\Http\Resources\DomainResource;
 use App\Models\Domain;
 use App\Models\DomainExclusion;
+use App\Models\User;
+use App\Mail\BrandedEmail;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Mail;
 
 class DomainController extends Controller
 {
@@ -82,7 +86,69 @@ class DomainController extends Controller
             $user->update(['onboarding' => $onboarding]);
         }
 
+        // ~90% of signups arrive on a phone, where pasting a <script> tag into a
+        // site's <head> is not possible — which is why domains were being added
+        // and then never installed. Put the snippet in their inbox right away so
+        // the install can happen later, at a desktop, without having to find this
+        // page again. Best-effort: a mail failure must not fail domain creation.
+        $this->mailInstallInstructions($user, $domain);
+
         return $this->success((new DomainResource($domain))->resolve(), 201);
+    }
+
+    /**
+     * Email the install snippet + one-click install link for this domain to the
+     * signed-in user. Deliberately sends only to the account's own address —
+     * never a user-supplied one — so it cannot be used to mail strangers.
+     */
+    public function sendInstallEmail(Request $request, Domain $domain): JsonResponse
+    {
+        $user = $request->user();
+
+        if (!$user->canAccessDomain($domain)) {
+            return $this->error('Not found.', 404);
+        }
+
+        if (!$this->mailInstallInstructions($user, $domain)) {
+            return $this->error('Could not send the email right now. Please try again.', 502);
+        }
+
+        return $this->success(['sent_to' => $user->email]);
+    }
+
+    /** @return bool whether the message was handed to the mailer */
+    private function mailInstallInstructions(User $user, Domain $domain): bool
+    {
+        $appUrl = rtrim((string) config('app.url'), '/');
+        $installUrl = "{$appUrl}/en/install/{$domain->script_token}";
+        $snippet = htmlspecialchars($domain->installSnippet(), ENT_QUOTES, 'UTF-8');
+        $codeStyle = 'background:#0A0A0A;color:#E5E5E5;padding:14px;border-radius:6px;'
+            . 'font-size:12px;line-height:1.5;overflow-x:auto;white-space:pre-wrap;word-break:break-all';
+
+        try {
+            Mail::to($user->email)->queue(new BrandedEmail(
+                "Install EYE on {$domain->domain}",
+                [
+                    'preheader' => "Your tracking snippet for {$domain->domain} — paste it once and data starts flowing.",
+                    'heading' => "Here's your snippet for {$domain->domain}",
+                    'lines' => [
+                        'Open this email on the computer you edit your site from, then paste the code below just before the closing <strong>&lt;/head&gt;</strong> tag.',
+                        "<pre style='{$codeStyle}'>{$snippet}</pre>",
+                        'On WordPress or Shopify you never touch code — the install guide below has a step-by-step path for each.',
+                    ],
+                    'ctaText' => 'Open the install guide',
+                    'ctaUrl' => $installUrl,
+                    'replyNote' => "Stuck? <strong>Reply to this email</strong> and we'll install it for you.",
+                    'unsubUrl' => EmailController::unsubscribeUrl($user->email),
+                ]
+            ));
+        } catch (\Throwable $e) {
+            report($e);
+
+            return false;
+        }
+
+        return true;
     }
 
     public function show(Request $request, Domain $domain): JsonResponse

@@ -20,17 +20,6 @@ class SnippetController extends Controller
             abort(404);
         }
 
-        $trackerUrl = rtrim(config('app.url'), '/') . '/tracker/eye.min.js';
-        $token = $domain->script_token;
-
-        $snippet = <<<HTML
-<!-- EYE Analytics -->
-<script>
-  window.EYE_TOKEN = "{$token}";
-</script>
-<script src="{$trackerUrl}" defer></script>
-HTML;
-
-        return response($snippet, 200, ['Content-Type' => 'text/plain']);
+        return response($domain->installSnippet(), 200, ['Content-Type' => 'text/plain']);
     }
 }

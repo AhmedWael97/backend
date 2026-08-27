@@ -539,6 +539,13 @@ Route::prefix('v1')->middleware('api.key')->group(function () {
             // Embed snippet
             Route::get('/{domain}/snippet', SnippetController::class)->name('snippet');
 
+            // Mail the snippet + install-guide link to the account's own address,
+            // for the (very common) case of signing up on a phone and installing
+            // later at a desktop. Throttled — it is a mail send.
+            Route::post('/{domain}/send-install-email', [DomainController::class, 'sendInstallEmail'])
+                ->name('send-install-email')
+                ->middleware('throttle:5,1');
+
             // Exclusions
             Route::prefix('/{domain}/exclusions')->name('exclusions.')->group(function () {
                 Route::get('/', [DomainController::class, 'listExclusions'])->name('index');

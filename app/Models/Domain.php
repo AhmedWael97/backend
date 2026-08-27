@@ -140,6 +140,34 @@ class Domain extends Model
         return $this->hasMany(AiSuggestion::class);
     }
 
+    /**
+     * The <script> block the user pastes into their site's <head>.
+     *
+     * Lives on the model because it is rendered in three places now — the
+     * snippet endpoint, the install email, and the dashboard install guide —
+     * and a token or tracker-URL change must not drift between them.
+     */
+    public function installSnippet(): string
+    {
+        // Both /tracker/eye.js and /api/collect are served from the frontend
+        // origin, so the snippet must be absolute against that host — the
+        // tracker otherwise resolves the collect endpoint against whatever
+        // origin the script was loaded from.
+        //
+        // This is the exact tag the dashboard install guide and the
+        // /install/{token} page show. It used to differ here (window.EYE_TOKEN
+        // plus /tracker/eye.min.js, which 404s and carries no data-api), so
+        // anything installed from GET /domains/{id}/snippet never loaded.
+        $base = rtrim((string) (config('app.frontend_url') ?: config('app.url')), '/');
+
+        return sprintf(
+            '<script src="%s/tracker/eye.js" data-token="%s" data-api="%s/api/collect" async></script>',
+            $base,
+            $this->script_token,
+            $base,
+        );
+    }
+
     public function latestUxScore(): HasOne
     {
         return $this->hasOne(UxScore::class)->latestOfMany('calculated_at');

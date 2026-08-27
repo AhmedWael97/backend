@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Auth;
 
+use App\Http\Controllers\Auth\Concerns\CapturesAcquisition;
 use App\Http\Controllers\Controller;
 use App\Models\OrganizationInvitation;
 use App\Models\OrganizationMember;
@@ -15,6 +16,8 @@ use Laravel\Socialite\Facades\Socialite;
 
 class FacebookController extends Controller
 {
+    use CapturesAcquisition;
+
     public function redirect(Request $request)
     {
         $redirect = $request->input('redirect') ?: config('app.frontend_url') . '/en/auth/callback';
@@ -51,8 +54,14 @@ class FacebookController extends Controller
         }
 
         if (!$user) {
+            // Referral code + first-touch utm/click-id ride inside the redirect
+            // URL's query string, which survives the OAuth trip via `state`.
             parse_str((string) parse_url($redirect, PHP_URL_QUERY), $redirectParams);
-            $user = $this->createUserFromFacebook($fbUser, $redirectParams['ref'] ?? null);
+            $user = $this->createUserFromFacebook(
+                $fbUser,
+                $redirectParams['ref'] ?? null,
+                $this->acquisitionAttributes($redirectParams)
+            );
         } elseif (!$user->facebook_id) {
             $user->facebook_id = $facebookId;
             $user->save();
@@ -136,18 +145,24 @@ class FacebookController extends Controller
         return base64_decode(strtr($input, '-_', '+/') . str_repeat('=', (4 - strlen($input) % 4) % 4));
     }
 
-    private function createUserFromFacebook($fbUser, ?string $referralCode = null): User
+    private function createUserFromFacebook($fbUser, ?string $referralCode = null, array $acquisition = []): User
     {
         return $this->createFacebookUser(
             $fbUser->getId(),
             $fbUser->getEmail(),
             $fbUser->getName(),
-            $referralCode
+            $referralCode,
+            $acquisition
         );
     }
 
-    private function createFacebookUser(string $facebookId, string $email, ?string $name, ?string $referralCode = null): User
-    {
+    private function createFacebookUser(
+        string $facebookId,
+        string $email,
+        ?string $name,
+        ?string $referralCode = null,
+        array $acquisition = []
+    ): User {
         $name = $name ?: ucfirst(explode('@', $email)[0]);
 
         $user = User::create([
@@ -162,7 +177,7 @@ class FacebookController extends Controller
             'role' => 'user',
             'status' => 'active',
             'referral_code' => User::generateReferralCode(),
-        ]);
+        ] + $acquisition);
 
         Referral::maybeCreate($referralCode, $user);
         $this->createTrialSubscription($user);
