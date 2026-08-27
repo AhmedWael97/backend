@@ -21,6 +21,10 @@ return [
         'http://localhost:8000',
         'http://127.0.0.1:3000',
         'http://127.0.0.1:8000',
+        // Canonical host. eye-analsyis.live is the pre-migration domain, kept
+        // because it still 301s here and old embeds may hit it first.
+        'https://eye-analysis.online',
+        'https://www.eye-analysis.online',
         'https://eye-analsyis.live',
         'https://www.eye-analsyis.live',
     ],
