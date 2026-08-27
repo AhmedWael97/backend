@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Growth;
 use App\Http\Controllers\Controller;
 use App\Models\CompanyEnrichment;
 use App\Models\Domain;
+use App\Models\EmailSuppression;
 use App\Models\Lead;
 use App\Models\OutreachEmail;
 use App\Services\ClickHouseService;
@@ -66,23 +67,41 @@ class LeadController extends Controller
             ->pluck('c', 'status');
 
         $total = (int) $byStatus->sum();
-        // "Contacted" means the message actually went out, so anything further
-        // along the pipeline counts too — a lead that replied was contacted.
-        $contacted = (int) ($byStatus['contacted'] ?? 0)
-            + (int) ($byStatus['replied'] ?? 0)
-            + (int) ($byStatus['won'] ?? 0);
+
+        // "Contacted" is the plain fact that a message went out, taken from
+        // last_contacted_at rather than from status. Deriving it from status
+        // undercounted: a lead that later bounced becomes `lost` and dropped
+        // out of the tile entirely, so three sends reported as two.
+        $contacted = Lead::where('user_id', $userId)->whereNotNull('last_contacted_at')->count();
         $replied = (int) ($byStatus['replied'] ?? 0) + (int) ($byStatus['won'] ?? 0);
+
+        // `lost` covers both a dead address and a human opt-out, which are very
+        // different signals — one is a data-quality problem, the other is
+        // feedback on the message. The suppression reason separates them.
+        $suppressed = EmailSuppression::where('user_id', $userId)
+            ->selectRaw('reason, count(*) as c')
+            ->groupBy('reason')
+            ->pluck('c', 'reason');
+
+        $bounced = (int) ($suppressed['bounce'] ?? 0);
+        $delivered = max(0, $contacted - $bounced);
 
         return $this->success([
             'total' => $total,
             'new' => (int) ($byStatus['new'] ?? 0),
             'contacted' => $contacted,
+            'delivered' => $delivered,
+            'bounced' => $bounced,
+            'unsubscribed' => (int) ($suppressed['unsubscribe'] ?? 0) + (int) ($suppressed['complaint'] ?? 0),
             'replied' => $replied,
             'won' => (int) ($byStatus['won'] ?? 0),
             'lost' => (int) ($byStatus['lost'] ?? 0),
             'with_email' => Lead::where('user_id', $userId)->whereNotNull('email')->count(),
             'drafts_pending' => OutreachEmail::where('user_id', $userId)->where('status', 'draft')->count(),
-            'reply_rate' => $contacted > 0 ? round($replied / $contacted * 100, 1) : 0.0,
+            // Measured against what actually landed. Counting bounces in the
+            // denominator would make a list full of dead addresses look like a
+            // failing offer, which is the wrong thing to go and fix.
+            'reply_rate' => $delivered > 0 ? round($replied / $delivered * 100, 1) : 0.0,
         ]);
     }
 
