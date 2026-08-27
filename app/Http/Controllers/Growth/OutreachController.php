@@ -7,6 +7,7 @@ use App\Models\EmailSuppression;
 use App\Models\Lead;
 use App\Models\OutreachEmail;
 use App\Services\AnthropicService;
+use App\Services\OutreachRenderer;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
@@ -128,11 +129,7 @@ class OutreachController extends Controller
 
         $token = Str::random(40);
         $unsubUrl = url("/api/v1/outreach/unsubscribe/{$token}");
-        $bodyHtml = nl2br(e($data['body']))
-            . '<br><br><hr style="border:none;border-top:1px solid #eee">'
-            . '<p style="font-size:12px;color:#888">' . e(config('app.name', 'EYE Analytics'))
-            . ' — you received this as a business contact. '
-            . '<a href="' . $unsubUrl . '">Unsubscribe</a>.</p>';
+        $bodyHtml = OutreachRenderer::html($data['body'], $unsubUrl);
 
         $status = 'sent';
         try {

@@ -6,6 +6,7 @@ use App\Http\Controllers\Tools\SeoCheckerController;
 use App\Models\EmailSuppression;
 use App\Models\Lead;
 use App\Models\OutreachEmail;
+use App\Models\Plan;
 use App\Models\User;
 use App\Services\AiTextService;
 use Illuminate\Console\Command;
@@ -167,27 +168,35 @@ class DraftOutreachCommand extends Command
                 . ' — fix: ' . ($issue['suggestion'] ?? 'see report') . "\n";
         }
 
+        $scanUrl = $this->scanUrl();
+        $pricing = $this->pricingLine();
+
         // AiTextService takes a single prompt and fails over between providers,
         // so the instructions and the data go in together.
-        $prompt = 'You write short B2B outreach emails (under 140 words), plain text, no hype, no emoji.' . "\n"
+        $prompt = 'You write short B2B outreach emails (under 160 words), plain text, no hype, no emoji.' . "\n"
             . 'CRITICAL RULE: you may ONLY reference the findings given below. Never invent, infer, '
             . 'embellish or add any issue that is not in that list. If the list is short, write a shorter '
-            . 'email. Do not promise rankings or revenue numbers.' . "\n"
+            . 'email. Do not promise rankings or revenue numbers. Copy the link and the pricing line '
+            . 'EXACTLY as given — never alter a price or a URL.' . "\n"
             . 'Return ONLY JSON: {"subject": "...", "body": "..."} using \n for line breaks.' . "\n\n"
             . "Write to {$company} ({$host}).\n\n"
             . "We ran an automated technical check on their homepage. Score {$audit['score']}/100, "
             . "{$issueCount} issues found. The verified findings are:\n{$findings}\n"
-            . 'Open by naming two or three of these findings specifically. Then mention that EYE Analytics '
-            . '(privacy-first analytics, heatmaps, session replay) can monitor this continuously across every '
-            . 'site they manage. End with one clear ask: reply if they want the full report. '
+            . "Include, verbatim, this link on its own line: {$scanUrl}\n"
+            . "Include, verbatim, this pricing sentence: {$pricing}\n\n"
+            . 'Open by naming two or three of these findings specifically. Invite them to run the same check '
+            . 'on any client site using the link (free, no account). Then the pricing sentence. '
+            . 'End with one clear ask: reply if they want the full report. '
             . 'Sign off as the EYE Analytics team.';
 
         try {
-            $result = $ai->generate($prompt, 700);
+            $result = $ai->generate($prompt, 800);
             $decoded = $this->decodeJson((string) ($result['text'] ?? ''));
             $subject = trim((string) ($decoded['subject'] ?? ''));
             $body = trim((string) ($decoded['body'] ?? ''));
-            if ($subject !== '' && $body !== '') {
+            // A model that dropped the link or mangled the price is worse than
+            // the template — fall through rather than ship a broken CTA.
+            if ($subject !== '' && $body !== '' && str_contains($body, $scanUrl)) {
                 return [$subject, $body];
             }
         } catch (\Throwable $e) {
@@ -199,10 +208,41 @@ class DraftOutreachCommand extends Command
             "{$host}: {$issueCount} technical issues we found",
             "Hi,\n\nWe ran an automated technical check on {$host} and it scored {$audit['score']}/100. "
                 . "What came back:\n\n{$findings}\n"
-                . 'We build EYE Analytics — privacy-first analytics with heatmaps and session replay — and this '
-                . "check runs continuously across every site you manage.\n\n"
+                . "Run the same check on any client site — free, no account needed:\n{$scanUrl}\n\n"
+                . 'We build EYE Analytics — privacy-first analytics with heatmaps, session replay and '
+                . "campaign ROAS, for watching every client site from one dashboard.\n{$pricing}\n\n"
                 . "Reply if you would like the full report for {$host}.\n\n— The EYE Analytics team",
         ];
+    }
+
+    /**
+     * The landing page's own audit box, UTM-tagged so replies from this campaign
+     * show up in our own Campaigns dashboard instead of as anonymous direct hits.
+     */
+    private function scanUrl(): string
+    {
+        $base = rtrim((string) (config('app.frontend_url') ?: config('app.url')), '/');
+
+        return "{$base}/en?utm_source=outreach&utm_medium=email&utm_campaign=agency_audit";
+    }
+
+    /**
+     * Priced from the live plans table rather than hardcoded, so a price change
+     * in the admin panel cannot leave the outreach quoting a stale number.
+     */
+    private function pricingLine(): string
+    {
+        $plan = Plan::where('slug', 'agency')->first() ?: Plan::where('slug', 'pro')->first();
+        if (!$plan) {
+            return 'Plans start at $20/month, with a 30-day free trial.';
+        }
+
+        $price = rtrim(rtrim(number_format((float) $plan->price_monthly, 2), '0'), '.');
+        $sites = (int) $plan->getLimit('domains', 5);
+        $seats = (int) $plan->getLimit('team_members', 10);
+
+        return "The {$plan->name} plan is \${$price}/month for {$sites} client sites and {$seats} team seats, "
+            . 'with a 30-day free trial.';
     }
 
     /**
