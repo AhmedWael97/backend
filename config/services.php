@@ -163,4 +163,11 @@ return [
         'basic_auth' => env('DATAFORSEO_API_BASE64_PASSWORD'), // base64(login:password), used directly as the Authorization header value
     ],
 
+    // Google Places (Text Search) — optional lead-sourcing provider for
+    // eye:source-leads. Billed per request; without a key the command falls
+    // back to the free OpenStreetMap/Overpass provider.
+    'google_places' => [
+        'key' => env('GOOGLE_PLACES_API_KEY'),
+    ],
+
 ];

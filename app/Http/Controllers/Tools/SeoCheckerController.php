@@ -26,6 +26,51 @@ class SeoCheckerController extends Controller
     private const UA = 'Mozilla/5.0 (compatible; EyeSEOBot/1.0)';
     private const MAX_CRAWL_PAGES = 20; // safety limit for full-site crawl
 
+    /**
+     * Run the same single-page audit as check(), for callers that are not an
+     * HTTP request — currently eye:draft-outreach, which needs the verified
+     * findings to build a prospect report.
+     *
+     * Returns null when the page could not be fetched. The `issues` it returns
+     * are the deterministic check results, never anything generated: the
+     * outreach copy is only ever allowed to describe these.
+     *
+     * @return array{url: string, score: int, passed: int, total: int, issues: array<int, array<string, mixed>>}|null
+     */
+    public function auditUrl(string $url): ?array
+    {
+        if (!$this->isSafeUrl($url)) {
+            return null;
+        }
+
+        try {
+            $response = $this->fetchWithSafeRedirects($url, self::UA, self::TIMEOUT);
+        } catch (\Throwable $e) {
+            return null;
+        }
+        if ($response === null || !$response->successful()) {
+            return null;
+        }
+
+        $checks = $this->runChecks(
+            $url,
+            substr($this->decompressBody($response), 0, self::MAX_BYTES),
+            $response->status(),
+            $response->headers()
+        );
+
+        $passed = count(array_filter($checks, fn ($c) => $c['status'] === 'pass'));
+        $total = count($checks);
+
+        return [
+            'url' => $url,
+            'score' => $total > 0 ? (int) round(($passed / $total) * 100) : 0,
+            'passed' => $passed,
+            'total' => $total,
+            'issues' => array_values(array_filter($checks, fn ($c) => $c['status'] !== 'pass')),
+        ];
+    }
+
     // ── Single page check ─────────────────────────────────────────────────────
 
     public function check(Request $request): JsonResponse

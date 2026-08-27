@@ -64,14 +64,46 @@ class OutreachController extends Controller
         return $this->success(['subject' => $subject, 'body' => $body]);
     }
 
+    /**
+     * Drafts waiting for review — written by eye:draft-outreach, which audits
+     * each lead's site and composes the message from the verified findings.
+     * They are rows in the same table as sent mail, distinguished by status,
+     * so a draft carries its own unsubscribe token from the moment it exists.
+     */
+    public function drafts(Request $request): JsonResponse
+    {
+        $drafts = OutreachEmail::with('lead:id,company,website,email,score')
+            ->where('user_id', $request->user()->id)
+            ->where('status', 'draft')
+            ->orderByDesc('id')
+            ->limit(200)
+            ->get(['id', 'lead_id', 'to_email', 'subject', 'body', 'created_at']);
+
+        return $this->success($drafts);
+    }
+
     public function send(Request $request): JsonResponse
     {
         $data = $request->validate([
-            'lead_id' => ['required', 'integer'],
-            'subject' => ['required', 'string', 'max:255'],
-            'body' => ['required', 'string', 'max:20000'],
+            // Either send a stored draft by id, or post subject/body directly
+            // (the dashboard's compose box still does the latter).
+            'draft_id' => ['nullable', 'integer'],
+            'lead_id' => ['required_without:draft_id', 'integer'],
+            'subject' => ['required_without:draft_id', 'string', 'max:255'],
+            'body' => ['required_without:draft_id', 'string', 'max:20000'],
         ]);
         $user = $request->user();
+
+        $draft = null;
+        if (!empty($data['draft_id'])) {
+            $draft = OutreachEmail::where('user_id', $user->id)
+                ->where('status', 'draft')
+                ->findOrFail((int) $data['draft_id']);
+            $data['lead_id'] = $draft->lead_id;
+            $data['subject'] = $draft->subject;
+            $data['body'] = $draft->body;
+        }
+
         $lead = Lead::where('user_id', $user->id)->findOrFail($data['lead_id']);
 
         $to = (string) $lead->email;
@@ -112,11 +144,20 @@ class OutreachController extends Controller
             $status = 'failed';
         }
 
-        OutreachEmail::create([
-            'user_id' => $user->id, 'lead_id' => $lead->id, 'to_email' => $to,
-            'subject' => $data['subject'], 'body' => $data['body'],
-            'status' => $status, 'unsubscribe_token' => $token, 'sent_at' => $status === 'sent' ? now() : null,
-        ]);
+        if ($draft) {
+            // Promote the draft in place — a second row would double-count sends
+            // against the daily cap reporting and orphan the draft's own token.
+            $draft->update([
+                'to_email' => $to, 'status' => $status, 'unsubscribe_token' => $token,
+                'sent_at' => $status === 'sent' ? now() : null,
+            ]);
+        } else {
+            OutreachEmail::create([
+                'user_id' => $user->id, 'lead_id' => $lead->id, 'to_email' => $to,
+                'subject' => $data['subject'], 'body' => $data['body'],
+                'status' => $status, 'unsubscribe_token' => $token, 'sent_at' => $status === 'sent' ? now() : null,
+            ]);
+        }
 
         if ($status === 'sent') {
             $lead->update(['status' => $lead->status === 'new' ? 'contacted' : $lead->status, 'last_contacted_at' => now()]);

@@ -348,6 +348,7 @@ Route::prefix('v1')->middleware('api.key')->group(function () {
             Route::put('{id}', [LeadController::class, 'update'])->name('update');
             Route::delete('{id}', [LeadController::class, 'destroy'])->name('destroy');
         });
+        Route::get('outreach/drafts', [OutreachController::class, 'drafts'])->name('outreach.drafts');
         Route::post('outreach/draft', [OutreachController::class, 'draft'])->name('outreach.draft');
         Route::post('outreach/send', [OutreachController::class, 'send'])->name('outreach.send');
 
