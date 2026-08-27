@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\CompanyEnrichment;
 use App\Models\Domain;
 use App\Models\Lead;
+use App\Models\OutreachEmail;
 use App\Services\ClickHouseService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -37,7 +38,52 @@ class LeadController extends Controller
                 $w->where('company', 'ilike', "%{$term}%")->orWhere('email', 'ilike', "%{$term}%")->orWhere('website', 'ilike', "%{$term}%");
             });
         }
-        return $this->success($q->orderByDesc('score')->orderByDesc('created_at')->limit(500)->get());
+        $perPage = max(5, min(100, (int) $request->query('per_page', 25)));
+        $page = $q->orderByDesc('score')->orderByDesc('created_at')
+            ->paginate($perPage, ['*'], 'page', max(1, (int) $request->query('page', 1)));
+
+        return $this->success([
+            'data' => $page->items(),
+            'page' => $page->currentPage(),
+            'per_page' => $page->perPage(),
+            'total' => $page->total(),
+            'last_page' => $page->lastPage(),
+        ]);
+    }
+
+    /**
+     * Counts for the header tiles. Deliberately unfiltered by the list's own
+     * status filter — the point of the tiles is to show the whole pipeline
+     * while you are looking at one slice of it.
+     */
+    public function stats(Request $request): JsonResponse
+    {
+        $userId = $request->user()->id;
+
+        $byStatus = Lead::where('user_id', $userId)
+            ->selectRaw('status, count(*) as c')
+            ->groupBy('status')
+            ->pluck('c', 'status');
+
+        $total = (int) $byStatus->sum();
+        // "Contacted" means the message actually went out, so anything further
+        // along the pipeline counts too — a lead that replied was contacted.
+        $contacted = (int) ($byStatus['contacted'] ?? 0)
+            + (int) ($byStatus['replied'] ?? 0)
+            + (int) ($byStatus['won'] ?? 0);
+        $replied = (int) ($byStatus['replied'] ?? 0) + (int) ($byStatus['won'] ?? 0);
+
+        return $this->success([
+            'total' => $total,
+            'new' => (int) ($byStatus['new'] ?? 0),
+            'contacted' => $contacted,
+            'replied' => $replied,
+            'won' => (int) ($byStatus['won'] ?? 0),
+            'lost' => (int) ($byStatus['lost'] ?? 0),
+            'with_email' => Lead::where('user_id', $userId)->whereNotNull('email')->count(),
+            'drafts_pending' => OutreachEmail::where('user_id', $userId)->where('status', 'draft')->count(),
+            'reply_rate' => $contacted > 0 ? round($replied / $contacted * 100, 1) : 0.0,
+        ]);
     }
 
     public function store(Request $request): JsonResponse

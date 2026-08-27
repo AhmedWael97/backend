@@ -189,6 +189,12 @@ Route::prefix('v1')->middleware('api.key')->group(function () {
     Route::post('outreach/mailgun-webhook', [OutreachController::class, 'mailgunWebhook'])
         ->name('outreach.mailgun')->withoutMiddleware('api.key')->middleware('throttle:120,1');
 
+    // Resend: delivery outcomes (bounce/complaint -> suppression) and inbound
+    // replies (prospect answered -> lead marked replied). Public, authenticated
+    // by the Svix signature the controller verifies.
+    Route::post('outreach/resend-webhook', \App\Http\Controllers\Growth\ResendWebhookController::class)
+        ->name('outreach.resend')->withoutMiddleware('api.key')->middleware('throttle:300,1');
+
     // Display/billing currency from visitor IP (Egypt → EGP, else USD) — public,
     // used by both the marketing pricing page and the in-app billing page.
     Route::get('geo/currency', GeoCurrencyController::class)
@@ -342,6 +348,7 @@ Route::prefix('v1')->middleware('api.key')->group(function () {
         // Growth — leads CRM + compliant AI outreach (user-scoped).
         Route::prefix('leads')->name('leads.')->middleware('subscribed')->group(function () {
             Route::get('/', [LeadController::class, 'index'])->name('index');
+            Route::get('stats', [LeadController::class, 'stats'])->name('stats');
             Route::post('/', [LeadController::class, 'store'])->name('store');
             Route::post('import', [LeadController::class, 'import'])->name('import');
             Route::post('warm', [LeadController::class, 'warm'])->name('warm');

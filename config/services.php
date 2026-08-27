@@ -20,6 +20,10 @@ return [
 
     'resend' => [
         'key' => env('RESEND_API_KEY'),
+        // Svix signing secret for the Resend webhook (delivery events + inbound
+        // replies). The endpoint is public, so without this it rejects
+        // everything rather than trusting the request body.
+        'webhook_secret' => env('RESEND_WEBHOOK_SECRET'),
     ],
 
     'ses' => [
