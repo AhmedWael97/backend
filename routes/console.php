@@ -40,3 +40,20 @@ Schedule::command('eye:generate-blog-posts --count=4')->dailyAt('06:00')->emailO
 Schedule::command('eye:fetch-seo-rankings')->dailyAt('05:00');
 // AI-visibility tracking: does EYE get mentioned when Gemini answers real buyer questions. Slow-moving signal, weekly is enough.
 Schedule::command('eye:check-ai-visibility')->weeklyOn(1, '07:00')->emailOutputOnFailure('info@senueg.com');
+
+// ── Cold outreach pipeline ──────────────────────────────────────────────────
+// Build tomorrow's batch overnight: source US agencies, resolve their published
+// contact address, audit their sites, draft from the verified findings. Runs
+// every day so a weekday send always has a full queue waiting.
+Schedule::command('eye:outreach-daily')
+    ->dailyAt('04:00')
+    ->emailOutputOnFailure('info@senueg.com');
+
+// Send the batch Mon-Fri at 11:00 America/New_York — business hours where the
+// recipients are, not where the server is. No-ops unless OUTREACH_AUTO_SEND is
+// on and a postal address is configured; the warm-up ramp caps the early runs.
+Schedule::command('eye:send-outreach')
+    ->weekdays()
+    ->at('11:00')
+    ->timezone('America/New_York')
+    ->emailOutputOnFailure('info@senueg.com');
